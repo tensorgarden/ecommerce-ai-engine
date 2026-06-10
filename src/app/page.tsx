@@ -4,11 +4,9 @@ import React, { useMemo } from "react";
 import { Badge, Card, ProgressBar, StatusDot, StatCard } from "@/components/ui";
 import {
   products,
-  priceOptimizations,
   customerSegments,
   revenueMetrics,
   promotions,
-  inventoryForecasts,
   getProductPerformanceRows,
   getHeroStats,
   getStockoutAlerts,
@@ -21,6 +19,11 @@ export default function DashboardPage() {
 
   const totalPromoRevenue = useMemo(
     () => promotions.reduce((sum, p) => sum + p.revenueGenerated, 0),
+    []
+  );
+
+  const totalIncrementalRevenue = useMemo(
+    () => promotions.reduce((sum, p) => sum + p.incrementalRevenue, 0),
     []
   );
 
@@ -424,10 +427,10 @@ export default function DashboardPage() {
               variant="neutral"
             />
             <StatCard
-              label="Total Budget Spent"
-              value={promotions.reduce((s, p) => s + p.spentSoFar, 0)}
+              label="Incremental Revenue"
+              value={totalIncrementalRevenue}
               format="currency"
-              variant="neutral"
+              variant="positive"
             />
             <StatCard
               label="Avg ROI"
@@ -451,6 +454,7 @@ export default function DashboardPage() {
                   <th className="pb-3 pr-4 font-medium text-right">Orders</th>
                   <th className="pb-3 pr-4 font-medium">Budget</th>
                   <th className="pb-3 pr-4 font-medium text-right">ROI</th>
+                  <th className="pb-3 pr-4 font-medium text-right">Cannib.</th>
                   <th className="pb-3 font-medium">Status</th>
                 </tr>
               </thead>
@@ -514,6 +518,19 @@ export default function DashboardPage() {
                         }
                       >
                         {promo.roi.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4 text-right tabular-nums">
+                      <span
+                        className={
+                          promo.cannibalizationRate > 40
+                            ? "font-medium text-red-600"
+                            : promo.cannibalizationRate > 25
+                              ? "font-medium text-amber-600"
+                              : "text-green-600"
+                        }
+                      >
+                        {promo.cannibalizationRate.toFixed(0)}%
                       </span>
                     </td>
                     <td className="py-3">

@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   products,
   priceOptimizations,
-  inventoryForecasts,
   customerSegments,
   revenueMetrics,
   promotions,
@@ -141,6 +140,28 @@ describe("Promotions", () => {
     for (const promo of promotions) {
       expect(promo.roi).toBeGreaterThan(0);
     }
+  });
+
+  it("every promotion has a cannibalization rate between 0 and 100", () => {
+    for (const promo of promotions) {
+      expect(promo.cannibalizationRate).toBeGreaterThanOrEqual(0);
+      expect(promo.cannibalizationRate).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it("incremental revenue is always less than or equal to total revenue", () => {
+    for (const promo of promotions) {
+      expect(promo.incrementalRevenue).toBeLessThanOrEqual(
+        promo.revenueGenerated
+      );
+    }
+  });
+
+  it("at least one promotion has cannibalization rate over 40%", () => {
+    const highCannib = promotions.filter(
+      (p) => p.cannibalizationRate > 40
+    );
+    expect(highCannib.length).toBeGreaterThanOrEqual(1);
   });
 });
 

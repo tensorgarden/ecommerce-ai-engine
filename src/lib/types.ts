@@ -82,6 +82,8 @@ export interface Promotion {
   ordersInfluenced: number;
   status: "active" | "scheduled" | "ended" | "paused";
   roi: number; // %
+  cannibalizationRate: number; // % of orders that would have happened anyway
+  incrementalRevenue: number; // revenue after subtracting cannibalized baseline
 }
 
 export interface ProductPerformanceRow {

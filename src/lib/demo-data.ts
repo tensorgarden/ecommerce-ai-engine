@@ -649,6 +649,8 @@ export const promotions: Promotion[] = [
     ordersInfluenced: 820,
     status: "active",
     roi: 659.4,
+    cannibalizationRate: 32.0,
+    incrementalRevenue: 96600,
   },
   {
     id: "promo-free-ship",
@@ -664,6 +666,8 @@ export const promotions: Promotion[] = [
     ordersInfluenced: 1200,
     status: "active",
     roi: 782.0,
+    cannibalizationRate: 45.0,
+    incrementalRevenue: 43200,
   },
   {
     id: "promo-bundle-deal",
@@ -679,6 +683,8 @@ export const promotions: Promotion[] = [
     ordersInfluenced: 340,
     status: "active",
     roi: 674.2,
+    cannibalizationRate: 18.0,
+    incrementalRevenue: 39400,
   },
   {
     id: "promo-beauty-bogo",
@@ -694,6 +700,8 @@ export const promotions: Promotion[] = [
     ordersInfluenced: 1560,
     status: "active",
     roi: 688.7,
+    cannibalizationRate: 28.0,
+    incrementalRevenue: 80600,
   },
   {
     id: "promo-loyalty-bonus",
@@ -709,6 +717,8 @@ export const promotions: Promotion[] = [
     ordersInfluenced: 2100,
     status: "active",
     roi: 690.3,
+    cannibalizationRate: 52.0,
+    incrementalRevenue: 117600,
   },
 ];
 
