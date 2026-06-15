@@ -757,3 +757,17 @@ export function getStockoutAlerts(): InventoryForecast[] {
     )
     .sort((a, b) => a.daysOfStockRemaining - b.daysOfStockRemaining);
 }
+
+/**
+ * Total margin dollars lost to promotion cannibalization — revenue from
+ * orders that would have occurred at full margin but were instead
+ * discounted by an active promotion. This is the silent cost behind
+ * promotions that look ROI-positive on top-line revenue alone.
+ */
+export function getCannibalizedMarginLoss(): number {
+  return promotions.reduce((totalLoss, promo) => {
+    const cannibalizedRevenue =
+      promo.revenueGenerated * (promo.cannibalizationRate / 100);
+    return totalLoss + cannibalizedRevenue * (revenueMetrics.grossMargin / 100);
+  }, 0);
+}

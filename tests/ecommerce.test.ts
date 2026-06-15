@@ -8,6 +8,7 @@ import {
   getProductPerformanceRows,
   getHeroStats,
   getStockoutAlerts,
+  getCannibalizedMarginLoss,
 } from "@/lib/demo-data";
 
 // ---------------------------------------------------------------------------
@@ -197,5 +198,34 @@ describe("ProductPerformanceRows", () => {
         expect(row.priceOptimization.productId).toBe(row.product.id);
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. Cannibalized margin loss from promotions
+// ---------------------------------------------------------------------------
+describe("CannibalizedMarginLoss", () => {
+  it("returns a positive dollar amount (cannibalization is real)", () => {
+    const loss = getCannibalizedMarginLoss();
+    expect(loss).toBeGreaterThan(0);
+  });
+
+  it("margin loss is less than total promo revenue", () => {
+    const loss = getCannibalizedMarginLoss();
+    const totalPromoRevenue = promotions.reduce(
+      (sum, p) => sum + p.revenueGenerated,
+      0,
+    );
+    expect(loss).toBeLessThan(totalPromoRevenue);
+  });
+
+  it("loyalty bonus promo (52% cannibalization) is the largest margin drain", () => {
+    const grossMargin = revenueMetrics.grossMargin / 100;
+    const byPromo = promotions.map((p) => ({
+      name: p.name,
+      loss: p.revenueGenerated * (p.cannibalizationRate / 100) * grossMargin,
+    }));
+    byPromo.sort((a, b) => b.loss - a.loss);
+    expect(byPromo[0].name).toBe("Loyalty Member Bonus 10%");
   });
 });
