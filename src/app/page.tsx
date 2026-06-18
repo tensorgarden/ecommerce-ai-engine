@@ -151,7 +151,10 @@ export default function DashboardPage() {
                             priceOptimization.recommendedPrice >
                             product.currentPrice
                               ? "font-medium text-green-600"
-                              : "font-medium text-amber-600"
+                              : priceOptimization.recommendedPrice <
+                                  product.currentPrice
+                                ? "font-medium text-amber-600"
+                                : "font-medium text-slate-600"
                           }
                         >
                           ${priceOptimization.recommendedPrice.toFixed(2)}
@@ -175,26 +178,50 @@ export default function DashboardPage() {
                     </td>
                     <td className="py-3 pr-4">
                       {priceOptimization ? (
-                        <div className="flex items-center gap-1.5">
-                          <Badge
-                            variant={
-                              priceOptimization.estimatedRevenueImpact > 0
-                                ? "success"
-                                : "warning"
-                            }
-                          >
-                            {priceOptimization.estimatedRevenueImpact > 0
-                              ? "+"
-                              : ""}
-                            {priceOptimization.estimatedRevenueImpact.toFixed(
-                              1
-                            )}
-                            % rev
-                          </Badge>
-                          <span className="text-xs text-ink/30">
-                            {Math.round(priceOptimization.confidence * 100)}%
-                            conf
-                          </span>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <Badge
+                              variant={
+                                priceOptimization.estimatedRevenueImpact > 0
+                                  ? "success"
+                                  : "warning"
+                              }
+                            >
+                              {priceOptimization.estimatedRevenueImpact > 0
+                                ? "+"
+                                : ""}
+                              {priceOptimization.estimatedRevenueImpact.toFixed(
+                                1
+                              )}
+                              % rev
+                            </Badge>
+                            <span className="text-xs text-ink/30">
+                              {Math.round(priceOptimization.confidence * 100)}%
+                              conf
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1 text-xs text-ink/40">
+                            <Badge
+                              variant={
+                                priceOptimization.inventorySignal ===
+                                "stockout_guardrail"
+                                  ? "warning"
+                                  : priceOptimization.inventorySignal ===
+                                      "overstock_clearance"
+                                    ? "info"
+                                    : "neutral"
+                              }
+                            >
+                              {priceOptimization.recommendedAction.replace(
+                                "_",
+                                " "
+                              )}
+                            </Badge>
+                            <span>
+                              Floor: $
+                              {priceOptimization.marginFloorPrice.toFixed(2)}
+                            </span>
+                          </div>
                         </div>
                       ) : (
                         <span className="text-xs text-ink/30">

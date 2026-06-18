@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   products,
   priceOptimizations,
+  inventoryForecasts,
   customerSegments,
   revenueMetrics,
   promotions,
@@ -55,6 +56,48 @@ describe("PriceOptimizations", () => {
     for (const po of priceOptimizations) {
       expect(po.confidence).toBeGreaterThanOrEqual(0);
       expect(po.confidence).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("recommendation actions match the price move", () => {
+    for (const po of priceOptimizations) {
+      if (po.recommendedAction === "raise_price") {
+        expect(po.recommendedPrice).toBeGreaterThan(po.currentPrice);
+      }
+
+      if (po.recommendedAction === "markdown") {
+        expect(po.recommendedPrice).toBeLessThan(po.currentPrice);
+      }
+
+      if (po.recommendedAction === "hold_price") {
+        expect(po.recommendedPrice).toBe(po.currentPrice);
+      }
+    }
+  });
+
+  it("margin guardrails keep every recommended price above cost", () => {
+    const productById = new Map(products.map((p) => [p.id, p]));
+
+    for (const po of priceOptimizations) {
+      const product = productById.get(po.productId);
+      if (!product) throw new Error(`Missing product ${po.productId}`);
+
+      expect(po.marginFloorPrice).toBeGreaterThan(product.costPrice);
+      expect(po.recommendedPrice).toBeGreaterThanOrEqual(po.marginFloorPrice);
+    }
+  });
+
+  it("does not markdown products under high or critical stockout pressure", () => {
+    const stockoutByProduct = new Map(
+      inventoryForecasts.map((f) => [f.productId, f.stockoutRisk])
+    );
+
+    for (const po of priceOptimizations) {
+      const risk = stockoutByProduct.get(po.productId);
+      if (risk === "high" || risk === "critical") {
+        expect(po.inventorySignal).toBe("stockout_guardrail");
+        expect(po.recommendedAction).not.toBe("markdown");
+      }
     }
   });
 });

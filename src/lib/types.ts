@@ -14,10 +14,23 @@ export interface Product {
   image?: string;
 }
 
+export type PricingRecommendationAction =
+  | "raise_price"
+  | "hold_price"
+  | "markdown";
+
+export type InventoryPricingSignal =
+  | "stockout_guardrail"
+  | "balanced"
+  | "overstock_clearance";
+
 export interface PriceOptimization {
   productId: string;
   currentPrice: number;
   recommendedPrice: number;
+  recommendedAction: PricingRecommendationAction;
+  inventorySignal: InventoryPricingSignal;
+  marginFloorPrice: number;
   confidence: number; // 0-1
   estimatedRevenueImpact: number; // %
   estimatedMarginImpact: number; // %
