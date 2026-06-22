@@ -5,6 +5,7 @@ import type {
   CustomerSegment,
   RevenueMetrics,
   Promotion,
+  PromotionProfitabilitySnapshot,
   ProductPerformanceRow,
   HeroStats,
 } from "./types";
@@ -795,3 +796,45 @@ export function getCannibalizedMarginLoss(): number {
     return totalLoss + cannibalizedRevenue * (revenueMetrics.grossMargin / 100);
   }, 0);
 }
+
+/**
+ * Promotion profitability after accounting for cannibalized demand and campaign
+ * spend. Broad coupons can look efficient on top-line ROI while still leaking
+ * margin from customers who would have bought without the discount.
+ */
+export function getPromotionProfitabilitySnapshots(): PromotionProfitabilitySnapshot[] {
+  const grossMarginRate = revenueMetrics.grossMargin / 100;
+
+  return promotions
+    .map((promo) => {
+      const cannibalizedRevenue =
+        promo.revenueGenerated * (promo.cannibalizationRate / 100);
+      const cannibalizedMarginLoss = cannibalizedRevenue * grossMarginRate;
+      const grossIncrementalMargin = promo.incrementalRevenue * grossMarginRate;
+      const netIncrementalMargin = grossIncrementalMargin - promo.spentSoFar;
+      const adjustedRoi =
+        promo.spentSoFar === 0
+          ? 0
+          : (netIncrementalMargin / promo.spentSoFar) * 100;
+      const riskLevel =
+        promo.cannibalizationRate >= 40 || adjustedRoi < 150
+          ? "margin_leak"
+          : promo.cannibalizationRate >= 25 || adjustedRoi < 225
+            ? "watch"
+            : "healthy";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        topLineRoi: promo.roi,
+        adjustedRoi,
+        cannibalizedRevenue,
+        cannibalizedMarginLoss,
+        grossIncrementalMargin,
+        netIncrementalMargin,
+        riskLevel,
+      };
+    })
+    .sort((a, b) => b.cannibalizedMarginLoss - a.cannibalizedMarginLoss);
+}
+

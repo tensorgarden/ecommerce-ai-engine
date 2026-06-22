@@ -10,6 +10,7 @@ import {
   getHeroStats,
   getStockoutAlerts,
   getCannibalizedMarginLoss,
+  getPromotionProfitabilitySnapshots,
 } from "@/lib/demo-data";
 
 // ---------------------------------------------------------------------------
@@ -272,3 +273,40 @@ describe("CannibalizedMarginLoss", () => {
     expect(byPromo[0].name).toBe("Loyalty Member Bonus 10%");
   });
 });
+
+// ---------------------------------------------------------------------------
+// 10. Promotion profitability after cannibalization and spend
+// ---------------------------------------------------------------------------
+describe("PromotionProfitabilitySnapshots", () => {
+  it("returns one margin-adjusted snapshot per promotion", () => {
+    const snapshots = getPromotionProfitabilitySnapshots();
+    expect(snapshots).toHaveLength(promotions.length);
+  });
+
+  it("calculates adjusted ROI from incremental margin after spend", () => {
+    const snapshots = getPromotionProfitabilitySnapshots();
+    const freeShipping = snapshots.find(
+      (s) => s.promotionId === "promo-free-ship",
+    );
+    const promo = promotions.find((p) => p.id === "promo-free-ship");
+    if (!freeShipping || !promo) throw new Error("Missing free shipping promo");
+
+    const expectedAdjustedRoi =
+      ((promo.incrementalRevenue * (revenueMetrics.grossMargin / 100) -
+        promo.spentSoFar) /
+        promo.spentSoFar) *
+      100;
+
+    expect(freeShipping.adjustedRoi).toBeCloseTo(expectedAdjustedRoi, 2);
+    expect(freeShipping.adjustedRoi).toBeLessThan(freeShipping.topLineRoi);
+  });
+
+  it("flags broad high-cannibalization offers as margin leaks", () => {
+    const risky = getPromotionProfitabilitySnapshots().filter(
+      (s) => s.riskLevel === "margin_leak",
+    );
+    expect(risky.map((s) => s.name)).toContain("Free Shipping Weekend");
+    expect(risky.map((s) => s.name)).toContain("Loyalty Member Bonus 10%");
+  });
+});
+

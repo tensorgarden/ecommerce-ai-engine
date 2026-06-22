@@ -99,6 +99,18 @@ export interface Promotion {
   incrementalRevenue: number; // revenue after subtracting cannibalized baseline
 }
 
+export interface PromotionProfitabilitySnapshot {
+  promotionId: string;
+  name: string;
+  topLineRoi: number;
+  adjustedRoi: number;
+  cannibalizedRevenue: number;
+  cannibalizedMarginLoss: number;
+  grossIncrementalMargin: number;
+  netIncrementalMargin: number;
+  riskLevel: "healthy" | "watch" | "margin_leak";
+}
+
 export interface ProductPerformanceRow {
   product: Product;
   priceOptimization?: PriceOptimization;
