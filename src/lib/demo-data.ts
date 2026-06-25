@@ -676,6 +676,12 @@ export const promotions: Promotion[] = [
     roi: 659.4,
     cannibalizationRate: 32.0,
     incrementalRevenue: 96600,
+    costExposure: {
+      paymentProcessingFees: 3200,
+      fulfillmentSubsidies: 1800,
+      loyaltyPointLiability: 2400,
+      returnReserve: 3600,
+    },
   },
   {
     id: "promo-free-ship",
@@ -693,6 +699,12 @@ export const promotions: Promotion[] = [
     roi: 782.0,
     cannibalizationRate: 45.0,
     incrementalRevenue: 43200,
+    costExposure: {
+      paymentProcessingFees: 2100,
+      fulfillmentSubsidies: 9800,
+      loyaltyPointLiability: 1200,
+      returnReserve: 2600,
+    },
   },
   {
     id: "promo-bundle-deal",
@@ -710,6 +722,12 @@ export const promotions: Promotion[] = [
     roi: 674.2,
     cannibalizationRate: 18.0,
     incrementalRevenue: 39400,
+    costExposure: {
+      paymentProcessingFees: 1400,
+      fulfillmentSubsidies: 900,
+      loyaltyPointLiability: 600,
+      returnReserve: 1200,
+    },
   },
   {
     id: "promo-beauty-bogo",
@@ -727,6 +745,12 @@ export const promotions: Promotion[] = [
     roi: 688.7,
     cannibalizationRate: 28.0,
     incrementalRevenue: 80600,
+    costExposure: {
+      paymentProcessingFees: 2600,
+      fulfillmentSubsidies: 1700,
+      loyaltyPointLiability: 1800,
+      returnReserve: 4200,
+    },
   },
   {
     id: "promo-loyalty-bonus",
@@ -744,6 +768,12 @@ export const promotions: Promotion[] = [
     roi: 690.3,
     cannibalizationRate: 52.0,
     incrementalRevenue: 117600,
+    costExposure: {
+      paymentProcessingFees: 4800,
+      fulfillmentSubsidies: 3100,
+      loyaltyPointLiability: 14500,
+      returnReserve: 5200,
+    },
   },
 ];
 
@@ -797,10 +827,21 @@ export function getCannibalizedMarginLoss(): number {
   }, 0);
 }
 
+export function getPromotionVariableCostExposure(promo: Promotion): number {
+  return (
+    promo.costExposure.paymentProcessingFees +
+    promo.costExposure.fulfillmentSubsidies +
+    promo.costExposure.loyaltyPointLiability +
+    promo.costExposure.returnReserve
+  );
+}
+
 /**
- * Promotion profitability after accounting for cannibalized demand and campaign
- * spend. Broad coupons can look efficient on top-line ROI while still leaking
- * margin from customers who would have bought without the discount.
+ * Promotion profitability after accounting for cannibalized demand, campaign
+ * spend, and variable costs such as payment fees, fulfillment subsidies,
+ * loyalty liabilities, and return reserves. Broad coupons can look efficient on
+ * top-line ROI while still leaking margin from customers who would have bought
+ * without the discount.
  */
 export function getPromotionProfitabilitySnapshots(): PromotionProfitabilitySnapshot[] {
   const grossMarginRate = revenueMetrics.grossMargin / 100;
@@ -811,11 +852,14 @@ export function getPromotionProfitabilitySnapshots(): PromotionProfitabilitySnap
         promo.revenueGenerated * (promo.cannibalizationRate / 100);
       const cannibalizedMarginLoss = cannibalizedRevenue * grossMarginRate;
       const grossIncrementalMargin = promo.incrementalRevenue * grossMarginRate;
-      const netIncrementalMargin = grossIncrementalMargin - promo.spentSoFar;
+      const variableCostExposure = getPromotionVariableCostExposure(promo);
+      const totalPromotionCost = promo.spentSoFar + variableCostExposure;
+      const netIncrementalMargin =
+        grossIncrementalMargin - totalPromotionCost;
       const adjustedRoi =
-        promo.spentSoFar === 0
+        totalPromotionCost === 0
           ? 0
-          : (netIncrementalMargin / promo.spentSoFar) * 100;
+          : (netIncrementalMargin / totalPromotionCost) * 100;
       const riskLevel =
         promo.cannibalizationRate >= 40 || adjustedRoi < 150
           ? "margin_leak"
@@ -831,6 +875,7 @@ export function getPromotionProfitabilitySnapshots(): PromotionProfitabilitySnap
         cannibalizedRevenue,
         cannibalizedMarginLoss,
         grossIncrementalMargin,
+        variableCostExposure,
         netIncrementalMargin,
         riskLevel,
       };

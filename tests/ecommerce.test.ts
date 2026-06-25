@@ -283,7 +283,7 @@ describe("PromotionProfitabilitySnapshots", () => {
     expect(snapshots).toHaveLength(promotions.length);
   });
 
-  it("calculates adjusted ROI from incremental margin after spend", () => {
+  it("calculates adjusted ROI from incremental margin after the full cost stack", () => {
     const snapshots = getPromotionProfitabilitySnapshots();
     const freeShipping = snapshots.find(
       (s) => s.promotionId === "promo-free-ship",
@@ -291,14 +291,43 @@ describe("PromotionProfitabilitySnapshots", () => {
     const promo = promotions.find((p) => p.id === "promo-free-ship");
     if (!freeShipping || !promo) throw new Error("Missing free shipping promo");
 
+    const variableCostExposure =
+      promo.costExposure.paymentProcessingFees +
+      promo.costExposure.fulfillmentSubsidies +
+      promo.costExposure.loyaltyPointLiability +
+      promo.costExposure.returnReserve;
+    const totalPromotionCost = promo.spentSoFar + variableCostExposure;
     const expectedAdjustedRoi =
       ((promo.incrementalRevenue * (revenueMetrics.grossMargin / 100) -
-        promo.spentSoFar) /
-        promo.spentSoFar) *
+        totalPromotionCost) /
+        totalPromotionCost) *
       100;
 
+    expect(freeShipping.variableCostExposure).toBe(variableCostExposure);
     expect(freeShipping.adjustedRoi).toBeCloseTo(expectedAdjustedRoi, 2);
     expect(freeShipping.adjustedRoi).toBeLessThan(freeShipping.topLineRoi);
+  });
+
+  it("subtracts fulfillment, payment, loyalty, and return reserves before clearing a promo", () => {
+    const snapshots = getPromotionProfitabilitySnapshots();
+    const loyaltyBonus = snapshots.find(
+      (s) => s.promotionId === "promo-loyalty-bonus",
+    );
+    const promo = promotions.find((p) => p.id === "promo-loyalty-bonus");
+    if (!loyaltyBonus || !promo) throw new Error("Missing loyalty bonus promo");
+
+    const hiddenCostStack =
+      promo.costExposure.paymentProcessingFees +
+      promo.costExposure.fulfillmentSubsidies +
+      promo.costExposure.loyaltyPointLiability +
+      promo.costExposure.returnReserve;
+
+    expect(loyaltyBonus.variableCostExposure).toBe(hiddenCostStack);
+    expect(loyaltyBonus.netIncrementalMargin).toBeCloseTo(
+      loyaltyBonus.grossIncrementalMargin - promo.spentSoFar - hiddenCostStack,
+      2,
+    );
+    expect(loyaltyBonus.adjustedRoi).toBeLessThan(50);
   });
 
   it("flags broad high-cannibalization offers as margin leaks", () => {

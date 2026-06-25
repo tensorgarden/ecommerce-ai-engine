@@ -81,6 +81,13 @@ export interface RevenueMetrics {
   periodEnd: string;
 }
 
+export interface PromotionCostExposure {
+  paymentProcessingFees: number;
+  fulfillmentSubsidies: number;
+  loyaltyPointLiability: number;
+  returnReserve: number;
+}
+
 export interface Promotion {
   id: string;
   name: string;
@@ -97,6 +104,7 @@ export interface Promotion {
   roi: number; // %
   cannibalizationRate: number; // % of orders that would have happened anyway
   incrementalRevenue: number; // revenue after subtracting cannibalized baseline
+  costExposure: PromotionCostExposure;
 }
 
 export interface PromotionProfitabilitySnapshot {
@@ -107,6 +115,7 @@ export interface PromotionProfitabilitySnapshot {
   cannibalizedRevenue: number;
   cannibalizedMarginLoss: number;
   grossIncrementalMargin: number;
+  variableCostExposure: number;
   netIncrementalMargin: number;
   riskLevel: "healthy" | "watch" | "margin_leak";
 }
