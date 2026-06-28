@@ -120,6 +120,14 @@ export interface PromotionProfitabilitySnapshot {
   riskLevel: "healthy" | "watch" | "margin_leak";
 }
 
+export interface PromotionBreakEvenSnapshot {
+  promotionId: string;
+  name: string;
+  effectiveDiscountDepth: number; // % of AOV or basket value
+  requiredVolumeLift: number; // % more units needed to hold gross profit
+  riskLevel: "healthy" | "watch" | "margin_leak";
+}
+
 export interface ProductPerformanceRow {
   product: Product;
   priceOptimization?: PriceOptimization;

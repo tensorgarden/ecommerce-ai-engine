@@ -11,6 +11,7 @@ import {
   getStockoutAlerts,
   getCannibalizedMarginLoss,
   getPromotionProfitabilitySnapshots,
+  getPromotionBreakEvenSnapshots,
 } from "@/lib/demo-data";
 
 // ---------------------------------------------------------------------------
@@ -339,3 +340,50 @@ describe("PromotionProfitabilitySnapshots", () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// 11. Promotion break-even volume lift
+// ---------------------------------------------------------------------------
+describe("PromotionBreakEvenSnapshots", () => {
+  it("returns one break-even snapshot per promotion", () => {
+    const snapshots = getPromotionBreakEvenSnapshots();
+    expect(snapshots).toHaveLength(promotions.length);
+  });
+
+  it("translates free shipping subsidies into AOV-based discount depth", () => {
+    const snapshots = getPromotionBreakEvenSnapshots();
+    const freeShipping = snapshots.find(
+      (s) => s.promotionId === "promo-free-ship",
+    );
+    if (!freeShipping) throw new Error("Missing free shipping snapshot");
+
+    expect(freeShipping.effectiveDiscountDepth).toBeCloseTo(
+      (9.99 / revenueMetrics.averageOrderValue) * 100,
+      2,
+    );
+  });
+
+  it("shows BOGO requires more unit lift than a 20% percentage discount", () => {
+    const snapshots = getPromotionBreakEvenSnapshots();
+    const bogo = snapshots.find((s) => s.promotionId === "promo-beauty-bogo");
+    const summer = snapshots.find(
+      (s) => s.promotionId === "promo-summer-sale",
+    );
+    if (!bogo || !summer) throw new Error("Missing promo snapshots");
+
+    expect(bogo.effectiveDiscountDepth).toBe(25);
+    expect(bogo.requiredVolumeLift).toBeGreaterThan(
+      summer.requiredVolumeLift,
+    );
+    expect(summer.requiredVolumeLift).toBeGreaterThan(40);
+  });
+
+  it("keeps broad high-cannibalization offers in margin review", () => {
+    const marginLeaks = getPromotionBreakEvenSnapshots()
+      .filter((s) => s.riskLevel === "margin_leak")
+      .map((s) => s.name);
+
+    expect(marginLeaks).toContain("Free Shipping Weekend");
+    expect(marginLeaks).toContain("Loyalty Member Bonus 10%");
+  });
+});

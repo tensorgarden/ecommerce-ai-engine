@@ -6,6 +6,7 @@ import type {
   RevenueMetrics,
   Promotion,
   PromotionProfitabilitySnapshot,
+  PromotionBreakEvenSnapshot,
   ProductPerformanceRow,
   HeroStats,
 } from "./types";
@@ -881,5 +882,50 @@ export function getPromotionProfitabilitySnapshots(): PromotionProfitabilitySnap
       };
     })
     .sort((a, b) => b.cannibalizedMarginLoss - a.cannibalizedMarginLoss);
+}
+
+export function getPromotionEffectiveDiscountDepth(promo: Promotion): number {
+  if (promo.type === "free_shipping") {
+    return (promo.discountValue / revenueMetrics.averageOrderValue) * 100;
+  }
+
+  if (promo.type === "bogo") {
+    return promo.discountValue / 2;
+  }
+
+  return promo.discountValue;
+}
+
+/**
+ * Break-even volume lift required before a discount can hold gross profit.
+ * This turns each offer into preflight math instead of waiting for top-line
+ * revenue to obscure non-incremental orders and margin leakage.
+ */
+export function getPromotionBreakEvenSnapshots(): PromotionBreakEvenSnapshot[] {
+  const grossMarginRate = revenueMetrics.grossMargin / 100;
+
+  return promotions
+    .map((promo) => {
+      const effectiveDiscountDepth = getPromotionEffectiveDiscountDepth(promo);
+      const discountRate = effectiveDiscountDepth / 100;
+      const denominator = 1 - discountRate / grossMarginRate;
+      const requiredVolumeLift =
+        denominator <= 0 ? Number.POSITIVE_INFINITY : (1 / denominator - 1) * 100;
+      const riskLevel =
+        requiredVolumeLift >= 100 || promo.cannibalizationRate >= 40
+          ? "margin_leak"
+          : requiredVolumeLift >= 40 || promo.cannibalizationRate >= 25
+            ? "watch"
+            : "healthy";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        effectiveDiscountDepth,
+        requiredVolumeLift,
+        riskLevel,
+      };
+    })
+    .sort((a, b) => b.requiredVolumeLift - a.requiredVolumeLift);
 }
 
