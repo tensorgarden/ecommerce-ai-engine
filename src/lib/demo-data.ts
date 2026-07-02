@@ -7,6 +7,7 @@ import type {
   Promotion,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
+  PromotionStackingRisk,
   ProductPerformanceRow,
   HeroStats,
 } from "./types";
@@ -861,7 +862,7 @@ export function getPromotionProfitabilitySnapshots(): PromotionProfitabilitySnap
         totalPromotionCost === 0
           ? 0
           : (netIncrementalMargin / totalPromotionCost) * 100;
-      const riskLevel =
+      const riskLevel: PromotionProfitabilitySnapshot["riskLevel"] =
         promo.cannibalizationRate >= 40 || adjustedRoi < 150
           ? "margin_leak"
           : promo.cannibalizationRate >= 25 || adjustedRoi < 225
@@ -911,7 +912,7 @@ export function getPromotionBreakEvenSnapshots(): PromotionBreakEvenSnapshot[] {
       const denominator = 1 - discountRate / grossMarginRate;
       const requiredVolumeLift =
         denominator <= 0 ? Number.POSITIVE_INFINITY : (1 / denominator - 1) * 100;
-      const riskLevel =
+      const riskLevel: PromotionBreakEvenSnapshot["riskLevel"] =
         requiredVolumeLift >= 100 || promo.cannibalizationRate >= 40
           ? "margin_leak"
           : requiredVolumeLift >= 40 || promo.cannibalizationRate >= 25
@@ -929,3 +930,82 @@ export function getPromotionBreakEvenSnapshots(): PromotionBreakEvenSnapshot[] {
     .sort((a, b) => b.requiredVolumeLift - a.requiredVolumeLift);
 }
 
+
+function getPromotionOverlapWindow(
+  first: Promotion,
+  second: Promotion,
+): PromotionStackingRisk["overlapWindow"] | null {
+  const startDate =
+    first.startDate > second.startDate ? first.startDate : second.startDate;
+  const endDate =
+    first.endDate < second.endDate ? first.endDate : second.endDate;
+
+  return startDate <= endDate ? { startDate, endDate } : null;
+}
+
+function getPromotionSharedScope(
+  first: Promotion,
+  second: Promotion,
+): PromotionStackingRisk["sharedScope"] | null {
+  const firstIsSitewide = first.applicableProducts.includes("all");
+  const secondIsSitewide = second.applicableProducts.includes("all");
+
+  if (firstIsSitewide || secondIsSitewide) {
+    return "sitewide";
+  }
+
+  const secondProducts = new Set(second.applicableProducts);
+  return first.applicableProducts.some((productId) => secondProducts.has(productId))
+    ? "product_overlap"
+    : null;
+}
+
+/**
+ * Discount stacking guardrail for overlapping campaigns. Buyers increasingly
+ * need promotion engines to catch sitewide coupons, free shipping, and loyalty
+ * incentives that combine into a deeper discount than the merchant intended.
+ */
+export function getPromotionStackingRisks(): PromotionStackingRisk[] {
+  const risks: PromotionStackingRisk[] = [];
+
+  for (let i = 0; i < promotions.length; i++) {
+    for (let j = i + 1; j < promotions.length; j++) {
+      const first = promotions[i];
+      const second = promotions[j];
+      const overlapWindow = getPromotionOverlapWindow(first, second);
+      const sharedScope = getPromotionSharedScope(first, second);
+
+      if (!overlapWindow || !sharedScope) continue;
+
+      const combinedDiscountDepth =
+        getPromotionEffectiveDiscountDepth(first) +
+        getPromotionEffectiveDiscountDepth(second);
+      const approvalStatus =
+        combinedDiscountDepth >= 30 ||
+        combinedDiscountDepth >= revenueMetrics.grossMargin * 0.5
+          ? "blocked"
+          : "review_required";
+
+      risks.push({
+        promotionIds: [first.id, second.id],
+        names: [first.name, second.name],
+        overlapWindow,
+        combinedDiscountDepth,
+        sharedScope,
+        approvalStatus,
+        reason:
+          approvalStatus === "blocked"
+            ? "Stacked discount depth consumes too much gross margin; pause one offer or require finance approval."
+            : "Overlapping sitewide/product-scope offer should be reviewed before checkout rules allow stacking.",
+      });
+    }
+  }
+
+  return risks.sort((a, b) => {
+    if (a.approvalStatus !== b.approvalStatus) {
+      return a.approvalStatus === "blocked" ? -1 : 1;
+    }
+
+    return b.combinedDiscountDepth - a.combinedDiscountDepth;
+  });
+}

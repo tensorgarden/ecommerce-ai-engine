@@ -12,6 +12,7 @@ import {
   getCannibalizedMarginLoss,
   getPromotionProfitabilitySnapshots,
   getPromotionBreakEvenSnapshots,
+  getPromotionStackingRisks,
 } from "@/lib/demo-data";
 
 // ---------------------------------------------------------------------------
@@ -385,5 +386,52 @@ describe("PromotionBreakEvenSnapshots", () => {
 
     expect(marginLeaks).toContain("Free Shipping Weekend");
     expect(marginLeaks).toContain("Loyalty Member Bonus 10%");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 12. Promotion discount stacking guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionStackingRisks", () => {
+  it("surfaces overlapping sitewide offers before stacked discounts leak margin", () => {
+    const risks = getPromotionStackingRisks();
+    const freeShippingLoyalty = risks.find(
+      (risk) =>
+        risk.promotionIds.includes("promo-free-ship") &&
+        risk.promotionIds.includes("promo-loyalty-bonus"),
+    );
+
+    expect(freeShippingLoyalty).toBeDefined();
+    expect(freeShippingLoyalty?.sharedScope).toBe("sitewide");
+    expect(freeShippingLoyalty?.approvalStatus).toBe("review_required");
+    expect(freeShippingLoyalty?.overlapWindow).toEqual({
+      startDate: "2026-06-05",
+      endDate: "2026-06-08",
+    });
+  });
+
+  it("blocks stacked discount depth that would consume too much gross margin", () => {
+    const risks = getPromotionStackingRisks();
+    const beautyLoyalty = risks.find(
+      (risk) =>
+        risk.promotionIds.includes("promo-beauty-bogo") &&
+        risk.promotionIds.includes("promo-loyalty-bonus"),
+    );
+
+    expect(beautyLoyalty).toBeDefined();
+    expect(beautyLoyalty?.combinedDiscountDepth).toBe(35);
+    expect(beautyLoyalty?.approvalStatus).toBe("blocked");
+    expect(beautyLoyalty?.reason).toContain("finance approval");
+  });
+
+  it("does not flag overlapping campaigns with no shared product scope", () => {
+    const risks = getPromotionStackingRisks();
+    const unrelatedPair = risks.find(
+      (risk) =>
+        risk.promotionIds.includes("promo-summer-sale") &&
+        risk.promotionIds.includes("promo-beauty-bogo"),
+    );
+
+    expect(unrelatedPair).toBeUndefined();
   });
 });

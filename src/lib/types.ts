@@ -128,6 +128,19 @@ export interface PromotionBreakEvenSnapshot {
   riskLevel: "healthy" | "watch" | "margin_leak";
 }
 
+export interface PromotionStackingRisk {
+  promotionIds: [string, string];
+  names: [string, string];
+  overlapWindow: {
+    startDate: string;
+    endDate: string;
+  };
+  combinedDiscountDepth: number;
+  sharedScope: "sitewide" | "product_overlap";
+  approvalStatus: "review_required" | "blocked";
+  reason: string;
+}
+
 export interface ProductPerformanceRow {
   product: Product;
   priceOptimization?: PriceOptimization;
