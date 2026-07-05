@@ -12,6 +12,7 @@ import {
   getCannibalizedMarginLoss,
   getPromotionProfitabilitySnapshots,
   getPromotionBreakEvenSnapshots,
+  getPromotionAudienceFitReviews,
   getPromotionStackingRisks,
 } from "@/lib/demo-data";
 
@@ -390,7 +391,51 @@ describe("PromotionBreakEvenSnapshots", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 12. Promotion discount stacking guardrails
+// 12. Promotion audience-fit guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionAudienceFitReviews", () => {
+  it("returns one audience-fit review per promotion", () => {
+    const reviews = getPromotionAudienceFitReviews();
+    expect(reviews).toHaveLength(promotions.length);
+  });
+
+  it("blocks broad or high-cannibalization offers that expose full-price buyers", () => {
+    const reviews = getPromotionAudienceFitReviews();
+    const freeShipping = reviews.find(
+      (review) => review.promotionId === "promo-free-ship",
+    );
+    const loyaltyBonus = reviews.find(
+      (review) => review.promotionId === "promo-loyalty-bonus",
+    );
+
+    expect(freeShipping?.reviewStatus).toBe("blocked");
+    expect(freeShipping?.exposedHighValueSegments).toContain(
+      "VIP High-Value",
+    );
+    expect(loyaltyBonus?.reviewStatus).toBe("blocked");
+    expect(loyaltyBonus?.exposedHighValueSegments).toEqual(
+      expect.arrayContaining(["VIP High-Value", "Loyal Regulars"]),
+    );
+  });
+
+  it("approves acquisition and reactivation promos that exclude high-value buyers", () => {
+    const reviews = getPromotionAudienceFitReviews();
+    const summer = reviews.find(
+      (review) => review.promotionId === "promo-summer-sale",
+    );
+    const beauty = reviews.find(
+      (review) => review.promotionId === "promo-beauty-bogo",
+    );
+
+    expect(summer?.reviewStatus).toBe("approved");
+    expect(summer?.exposedHighValueSegments).toEqual([]);
+    expect(beauty?.reviewStatus).toBe("approved");
+    expect(beauty?.exposedHighValueSegments).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 13. Promotion discount stacking guardrails
 // ---------------------------------------------------------------------------
 describe("PromotionStackingRisks", () => {
   it("surfaces overlapping sitewide offers before stacked discounts leak margin", () => {

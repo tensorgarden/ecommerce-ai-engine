@@ -88,6 +88,13 @@ export interface PromotionCostExposure {
   returnReserve: number;
 }
 
+export type PromotionAudienceIntent =
+  | "acquisition"
+  | "reactivation"
+  | "loyalty_reward"
+  | "category_expansion"
+  | "cart_conversion";
+
 export interface Promotion {
   id: string;
   name: string;
@@ -105,6 +112,18 @@ export interface Promotion {
   cannibalizationRate: number; // % of orders that would have happened anyway
   incrementalRevenue: number; // revenue after subtracting cannibalized baseline
   costExposure: PromotionCostExposure;
+  audienceIntent: PromotionAudienceIntent;
+  targetSegments: string[]; // customer segment IDs or "all"
+  excludedSegments: string[]; // customer segment IDs withheld from the offer
+}
+
+export interface PromotionAudienceFitReview {
+  promotionId: string;
+  name: string;
+  audienceIntent: PromotionAudienceIntent;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  exposedHighValueSegments: string[];
+  reason: string;
 }
 
 export interface PromotionProfitabilitySnapshot {

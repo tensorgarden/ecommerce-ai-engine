@@ -5,6 +5,7 @@ import type {
   CustomerSegment,
   RevenueMetrics,
   Promotion,
+  PromotionAudienceFitReview,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
   PromotionStackingRisk,
@@ -668,6 +669,9 @@ export const promotions: Promotion[] = [
     type: "percentage",
     discountValue: 20,
     applicableProducts: ["prod-001", "prod-003", "prod-006", "prod-011"],
+    audienceIntent: "category_expansion",
+    targetSegments: ["seg-new", "seg-bargain"],
+    excludedSegments: ["seg-vip", "seg-loyal"],
     startDate: "2026-06-01",
     endDate: "2026-06-30",
     budget: 50000,
@@ -691,6 +695,9 @@ export const promotions: Promotion[] = [
     type: "free_shipping",
     discountValue: 9.99,
     applicableProducts: ["all"],
+    audienceIntent: "cart_conversion",
+    targetSegments: ["all"],
+    excludedSegments: [],
     startDate: "2026-06-05",
     endDate: "2026-06-08",
     budget: 15000,
@@ -714,6 +721,9 @@ export const promotions: Promotion[] = [
     type: "bundle",
     discountValue: 15,
     applicableProducts: ["prod-007", "prod-008", "prod-009", "prod-010"],
+    audienceIntent: "acquisition",
+    targetSegments: ["seg-new", "seg-at-risk"],
+    excludedSegments: ["seg-vip", "seg-loyal"],
     startDate: "2026-06-01",
     endDate: "2026-07-15",
     budget: 25000,
@@ -737,6 +747,9 @@ export const promotions: Promotion[] = [
     type: "bogo",
     discountValue: 50,
     applicableProducts: ["prod-014", "prod-015", "prod-016"],
+    audienceIntent: "reactivation",
+    targetSegments: ["seg-at-risk", "seg-bargain"],
+    excludedSegments: ["seg-vip", "seg-loyal"],
     startDate: "2026-06-03",
     endDate: "2026-06-20",
     budget: 30000,
@@ -760,6 +773,9 @@ export const promotions: Promotion[] = [
     type: "percentage",
     discountValue: 10,
     applicableProducts: ["all"],
+    audienceIntent: "loyalty_reward",
+    targetSegments: ["seg-vip", "seg-loyal"],
+    excludedSegments: [],
     startDate: "2026-05-15",
     endDate: "2026-08-15",
     budget: 80000,
@@ -1008,4 +1024,74 @@ export function getPromotionStackingRisks(): PromotionStackingRisk[] {
 
     return b.combinedDiscountDepth - a.combinedDiscountDepth;
   });
+}
+
+const audienceReviewRank: Record<
+  PromotionAudienceFitReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+function isHighValueDiscountSegment(segment: CustomerSegment): boolean {
+  return (
+    segment.lifetimeValue >= revenueMetrics.customerLifetimeValue * 1.8 ||
+    segment.avgOrderValue >= revenueMetrics.averageOrderValue * 1.4
+  );
+}
+
+function getPromotionTargetedSegments(promo: Promotion): CustomerSegment[] {
+  const targetsAllSegments = promo.targetSegments.includes("all");
+
+  return customerSegments.filter((segment) => {
+    const targeted =
+      targetsAllSegments || promo.targetSegments.includes(segment.id);
+    return targeted && !promo.excludedSegments.includes(segment.id);
+  });
+}
+
+/**
+ * Audience-fit guardrail for coupon leakage. Broad discounts should not quietly
+ * reach VIP or loyal buyers who already purchase at full price without a
+ * holdout/finance review.
+ */
+export function getPromotionAudienceFitReviews(): PromotionAudienceFitReview[] {
+  return promotions
+    .map((promo) => {
+      const exposedHighValueSegments = getPromotionTargetedSegments(promo)
+        .filter(isHighValueDiscountSegment)
+        .map((segment) => segment.name);
+      const exposesHighValueSegments = exposedHighValueSegments.length > 0;
+      const broadAudience = promo.targetSegments.includes("all");
+      const highCannibalization = promo.cannibalizationRate >= 40;
+      const reviewStatus: PromotionAudienceFitReview["reviewStatus"] =
+        exposesHighValueSegments && (broadAudience || highCannibalization)
+          ? "blocked"
+          : exposesHighValueSegments ||
+              (broadAudience && promo.cannibalizationRate >= 25)
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Offer exposes high-value full-price buyers while cannibalization risk is high; gate checkout or add CRM exclusions before launch."
+          : reviewStatus === "review_required"
+            ? "Offer may reach valuable repeat buyers; require a CRM holdout or finance review before expanding audience."
+            : "Audience excludes high-value full-price buyers or is narrow enough to clear discount governance.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        audienceIntent: promo.audienceIntent,
+        reviewStatus,
+        exposedHighValueSegments,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const reviewRank =
+        audienceReviewRank[a.reviewStatus] - audienceReviewRank[b.reviewStatus];
+      return reviewRank === 0 ? a.name.localeCompare(b.name) : reviewRank;
+    });
 }
