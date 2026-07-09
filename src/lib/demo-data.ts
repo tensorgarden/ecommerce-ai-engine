@@ -6,6 +6,7 @@ import type {
   RevenueMetrics,
   Promotion,
   PromotionAudienceFitReview,
+  PromotionLeakageReview,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
   PromotionStackingRisk,
@@ -688,6 +689,12 @@ export const promotions: Promotion[] = [
       loyaltyPointLiability: 2400,
       returnReserve: 3600,
     },
+    redemptionControl: {
+      codeStrategy: "segment_locked",
+      distributionChannels: ["email", "onsite_banner"],
+      estimatedLeakageRate: 8,
+      maxRedemptionsPerCustomer: 1,
+    },
   },
   {
     id: "promo-free-ship",
@@ -713,6 +720,12 @@ export const promotions: Promotion[] = [
       fulfillmentSubsidies: 9800,
       loyaltyPointLiability: 1200,
       returnReserve: 2600,
+    },
+    redemptionControl: {
+      codeStrategy: "public_code",
+      distributionChannels: ["onsite_banner", "coupon_extension"],
+      estimatedLeakageRate: 32,
+      maxRedemptionsPerCustomer: 5,
     },
   },
   {
@@ -740,6 +753,12 @@ export const promotions: Promotion[] = [
       loyaltyPointLiability: 600,
       returnReserve: 1200,
     },
+    redemptionControl: {
+      codeStrategy: "single_use",
+      distributionChannels: ["email", "sms"],
+      estimatedLeakageRate: 4,
+      maxRedemptionsPerCustomer: 1,
+    },
   },
   {
     id: "promo-beauty-bogo",
@@ -766,6 +785,12 @@ export const promotions: Promotion[] = [
       loyaltyPointLiability: 1800,
       returnReserve: 4200,
     },
+    redemptionControl: {
+      codeStrategy: "segment_locked",
+      distributionChannels: ["email", "affiliate_network"],
+      estimatedLeakageRate: 12,
+      maxRedemptionsPerCustomer: 2,
+    },
   },
   {
     id: "promo-loyalty-bonus",
@@ -791,6 +816,12 @@ export const promotions: Promotion[] = [
       fulfillmentSubsidies: 3100,
       loyaltyPointLiability: 14500,
       returnReserve: 5200,
+    },
+    redemptionControl: {
+      codeStrategy: "segment_locked",
+      distributionChannels: ["loyalty_portal", "coupon_extension"],
+      estimatedLeakageRate: 18,
+      maxRedemptionsPerCustomer: 3,
     },
   },
 ];
@@ -1024,6 +1055,63 @@ export function getPromotionStackingRisks(): PromotionStackingRisk[] {
 
     return b.combinedDiscountDepth - a.combinedDiscountDepth;
   });
+}
+
+const leakageReviewRank: Record<PromotionLeakageReview["controlStatus"], number> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+const leakageProneChannels = new Set([
+  "coupon_extension",
+  "affiliate_network",
+]);
+
+/**
+ * Coupon leakage guardrail for targeted promotions. Public codes picked up by
+ * coupon extensions or affiliate surfaces can turn a controlled offer into a
+ * margin-eroding universal discount before the team sees it in top-line ROI.
+ */
+export function getPromotionLeakageReviews(): PromotionLeakageReview[] {
+  return promotions
+    .map((promo) => {
+      const exposedLeakageChannels = promo.redemptionControl.distributionChannels
+        .filter((channel) => leakageProneChannels.has(channel));
+      const publicCode = promo.redemptionControl.codeStrategy === "public_code";
+      const highLeakage = promo.redemptionControl.estimatedLeakageRate >= 20;
+      const repeatableCode = promo.redemptionControl.maxRedemptionsPerCustomer > 1;
+      const controlStatus: PromotionLeakageReview["controlStatus"] =
+        exposedLeakageChannels.includes("coupon_extension") &&
+        (publicCode || highLeakage)
+          ? "blocked"
+          : exposedLeakageChannels.length > 0 ||
+              repeatableCode ||
+              promo.redemptionControl.estimatedLeakageRate >= 10
+            ? "review_required"
+            : "approved";
+      const reason =
+        controlStatus === "blocked"
+          ? "Public or high-leakage code is already exposed through coupon extensions; rotate the code or enforce segment locking before more redemptions."
+          : controlStatus === "review_required"
+            ? "Leakage-prone channel or repeatable code needs QA before the offer expands beyond its intended segment."
+            : "Distribution is narrow, single-use, and below the leakage review threshold.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        controlStatus,
+        leakageRate: promo.redemptionControl.estimatedLeakageRate,
+        exposedLeakageChannels,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        leakageReviewRank[a.controlStatus] -
+        leakageReviewRank[b.controlStatus];
+      return rank === 0 ? b.leakageRate - a.leakageRate : rank;
+    });
 }
 
 const audienceReviewRank: Record<

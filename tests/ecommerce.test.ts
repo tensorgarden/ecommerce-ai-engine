@@ -13,6 +13,7 @@ import {
   getPromotionProfitabilitySnapshots,
   getPromotionBreakEvenSnapshots,
   getPromotionAudienceFitReviews,
+  getPromotionLeakageReviews,
   getPromotionStackingRisks,
 } from "@/lib/demo-data";
 
@@ -434,8 +435,42 @@ describe("PromotionAudienceFitReviews", () => {
   });
 });
 
+
 // ---------------------------------------------------------------------------
-// 13. Promotion discount stacking guardrails
+// 13. Promotion coupon leakage guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionLeakageReviews", () => {
+  it("returns one leakage review per promotion", () => {
+    const reviews = getPromotionLeakageReviews();
+    expect(reviews).toHaveLength(promotions.length);
+  });
+
+  it("blocks public codes exposed through coupon extensions", () => {
+    const reviews = getPromotionLeakageReviews();
+    const freeShipping = reviews.find(
+      (review) => review.promotionId === "promo-free-ship",
+    );
+
+    expect(freeShipping?.controlStatus).toBe("blocked");
+    expect(freeShipping?.exposedLeakageChannels).toContain(
+      "coupon_extension",
+    );
+    expect(freeShipping?.reason).toContain("rotate the code");
+  });
+
+  it("approves single-use segment-locked offers without leakage-prone channels", () => {
+    const reviews = getPromotionLeakageReviews();
+    const bundle = reviews.find(
+      (review) => review.promotionId === "promo-bundle-deal",
+    );
+
+    expect(bundle?.controlStatus).toBe("approved");
+    expect(bundle?.exposedLeakageChannels).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 14. Promotion discount stacking guardrails
 // ---------------------------------------------------------------------------
 describe("PromotionStackingRisks", () => {
   it("surfaces overlapping sitewide offers before stacked discounts leak margin", () => {

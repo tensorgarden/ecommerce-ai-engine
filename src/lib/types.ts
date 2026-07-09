@@ -88,6 +88,21 @@ export interface PromotionCostExposure {
   returnReserve: number;
 }
 
+export type PromotionRedemptionChannel =
+  | "email"
+  | "sms"
+  | "loyalty_portal"
+  | "onsite_banner"
+  | "coupon_extension"
+  | "affiliate_network";
+
+export interface PromotionRedemptionControl {
+  codeStrategy: "single_use" | "segment_locked" | "public_code";
+  distributionChannels: PromotionRedemptionChannel[];
+  estimatedLeakageRate: number; // % of redemptions outside intended audience
+  maxRedemptionsPerCustomer: number;
+}
+
 export type PromotionAudienceIntent =
   | "acquisition"
   | "reactivation"
@@ -112,6 +127,7 @@ export interface Promotion {
   cannibalizationRate: number; // % of orders that would have happened anyway
   incrementalRevenue: number; // revenue after subtracting cannibalized baseline
   costExposure: PromotionCostExposure;
+  redemptionControl: PromotionRedemptionControl;
   audienceIntent: PromotionAudienceIntent;
   targetSegments: string[]; // customer segment IDs or "all"
   excludedSegments: string[]; // customer segment IDs withheld from the offer
@@ -123,6 +139,15 @@ export interface PromotionAudienceFitReview {
   audienceIntent: PromotionAudienceIntent;
   reviewStatus: "approved" | "review_required" | "blocked";
   exposedHighValueSegments: string[];
+  reason: string;
+}
+
+export interface PromotionLeakageReview {
+  promotionId: string;
+  name: string;
+  controlStatus: "approved" | "review_required" | "blocked";
+  leakageRate: number;
+  exposedLeakageChannels: PromotionRedemptionChannel[];
   reason: string;
 }
 
