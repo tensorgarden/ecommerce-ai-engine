@@ -88,6 +88,11 @@ export interface PromotionCostExposure {
   returnReserve: number;
 }
 
+export interface PromotionReturnExposure {
+  expectedReturnRate: number; // % of influenced orders expected to be returned
+  reverseLogisticsCostPerReturn: number;
+}
+
 export type PromotionRedemptionChannel =
   | "email"
   | "sms"
@@ -127,6 +132,7 @@ export interface Promotion {
   cannibalizationRate: number; // % of orders that would have happened anyway
   incrementalRevenue: number; // revenue after subtracting cannibalized baseline
   costExposure: PromotionCostExposure;
+  returnExposure: PromotionReturnExposure;
   redemptionControl: PromotionRedemptionControl;
   audienceIntent: PromotionAudienceIntent;
   targetSegments: string[]; // customer segment IDs or "all"
@@ -148,6 +154,16 @@ export interface PromotionLeakageReview {
   controlStatus: "approved" | "review_required" | "blocked";
   leakageRate: number;
   exposedLeakageChannels: PromotionRedemptionChannel[];
+  reason: string;
+}
+
+export interface PromotionReturnRiskReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  expectedReturnRate: number;
+  estimatedReverseLogisticsCost: number;
+  reserveCoverageRatio: number;
   reason: string;
 }
 

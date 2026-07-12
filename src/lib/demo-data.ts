@@ -7,6 +7,7 @@ import type {
   Promotion,
   PromotionAudienceFitReview,
   PromotionLeakageReview,
+  PromotionReturnRiskReview,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
   PromotionStackingRisk,
@@ -689,6 +690,10 @@ export const promotions: Promotion[] = [
       loyaltyPointLiability: 2400,
       returnReserve: 3600,
     },
+    returnExposure: {
+      expectedReturnRate: 12,
+      reverseLogisticsCostPerReturn: 14,
+    },
     redemptionControl: {
       codeStrategy: "segment_locked",
       distributionChannels: ["email", "onsite_banner"],
@@ -720,6 +725,10 @@ export const promotions: Promotion[] = [
       fulfillmentSubsidies: 9800,
       loyaltyPointLiability: 1200,
       returnReserve: 2600,
+    },
+    returnExposure: {
+      expectedReturnRate: 22,
+      reverseLogisticsCostPerReturn: 13,
     },
     redemptionControl: {
       codeStrategy: "public_code",
@@ -753,6 +762,10 @@ export const promotions: Promotion[] = [
       loyaltyPointLiability: 600,
       returnReserve: 1200,
     },
+    returnExposure: {
+      expectedReturnRate: 8,
+      reverseLogisticsCostPerReturn: 12,
+    },
     redemptionControl: {
       codeStrategy: "single_use",
       distributionChannels: ["email", "sms"],
@@ -785,6 +798,10 @@ export const promotions: Promotion[] = [
       loyaltyPointLiability: 1800,
       returnReserve: 4200,
     },
+    returnExposure: {
+      expectedReturnRate: 16,
+      reverseLogisticsCostPerReturn: 10,
+    },
     redemptionControl: {
       codeStrategy: "segment_locked",
       distributionChannels: ["email", "affiliate_network"],
@@ -816,6 +833,10 @@ export const promotions: Promotion[] = [
       fulfillmentSubsidies: 3100,
       loyaltyPointLiability: 14500,
       returnReserve: 5200,
+    },
+    returnExposure: {
+      expectedReturnRate: 19,
+      reverseLogisticsCostPerReturn: 14,
     },
     redemptionControl: {
       codeStrategy: "segment_locked",
@@ -1181,5 +1202,60 @@ export function getPromotionAudienceFitReviews(): PromotionAudienceFitReview[] {
       const reviewRank =
         audienceReviewRank[a.reviewStatus] - audienceReviewRank[b.reviewStatus];
       return reviewRank === 0 ? a.name.localeCompare(b.name) : reviewRank;
+    });
+}
+
+const returnRiskRank: Record<PromotionReturnRiskReview["reviewStatus"], number> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Return-cost preflight for active promotions. Discount-led order volume can
+ * look profitable until reverse-logistics costs arrive, so high-return offers
+ * must carry enough reserve before they are allowed to scale.
+ */
+export function getPromotionReturnRiskReviews(): PromotionReturnRiskReview[] {
+  return promotions
+    .map((promo) => {
+      const estimatedReturns =
+        promo.ordersInfluenced * (promo.returnExposure.expectedReturnRate / 100);
+      const estimatedReverseLogisticsCost =
+        estimatedReturns * promo.returnExposure.reverseLogisticsCostPerReturn;
+      const reserveCoverageRatio =
+        estimatedReverseLogisticsCost === 0
+          ? Number.POSITIVE_INFINITY
+          : promo.costExposure.returnReserve / estimatedReverseLogisticsCost;
+      const highReturnRisk = promo.returnExposure.expectedReturnRate >= 18;
+      const reviewStatus: PromotionReturnRiskReview["reviewStatus"] =
+        highReturnRisk && reserveCoverageRatio < 1
+          ? "blocked"
+          : promo.returnExposure.expectedReturnRate >= 15 ||
+              reserveCoverageRatio < 1
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Expected return volume exceeds the reverse-logistics reserve; increase the return reserve or narrow the offer before scaling."
+          : reviewStatus === "review_required"
+            ? "Return rate is elevated; validate fit, refund, and reverse-logistics assumptions before expanding the promotion."
+            : "Expected return costs are below the review threshold and covered by the current reserve.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        expectedReturnRate: promo.returnExposure.expectedReturnRate,
+        estimatedReverseLogisticsCost,
+        reserveCoverageRatio,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank = returnRiskRank[a.reviewStatus] - returnRiskRank[b.reviewStatus];
+      return rank === 0
+        ? b.expectedReturnRate - a.expectedReturnRate
+        : rank;
     });
 }

@@ -14,6 +14,7 @@ import {
   getPromotionBreakEvenSnapshots,
   getPromotionAudienceFitReviews,
   getPromotionLeakageReviews,
+  getPromotionReturnRiskReviews,
   getPromotionStackingRisks,
 } from "@/lib/demo-data";
 
@@ -513,5 +514,46 @@ describe("PromotionStackingRisks", () => {
     );
 
     expect(unrelatedPair).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 15. Promotion return-cost guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionReturnRiskReviews", () => {
+  it("returns one return-risk review per promotion", () => {
+    const reviews = getPromotionReturnRiskReviews();
+    expect(reviews).toHaveLength(promotions.length);
+  });
+
+  it("blocks high-return promotions whose reverse-logistics reserve is insufficient", () => {
+    const reviews = getPromotionReturnRiskReviews();
+    const blockedIds = reviews
+      .filter((review) => review.reviewStatus === "blocked")
+      .map((review) => review.promotionId);
+    const freeShipping = reviews.find(
+      (review) => review.promotionId === "promo-free-ship",
+    );
+
+    expect(blockedIds).toEqual(
+      expect.arrayContaining(["promo-free-ship", "promo-loyalty-bonus"]),
+    );
+    expect(freeShipping?.reserveCoverageRatio).toBeLessThan(1);
+    expect(freeShipping?.reason).toContain("increase the return reserve");
+  });
+
+  it("approves targeted offers when projected return costs are fully reserved", () => {
+    const reviews = getPromotionReturnRiskReviews();
+    const summer = reviews.find(
+      (review) => review.promotionId === "promo-summer-sale",
+    );
+    const bundle = reviews.find(
+      (review) => review.promotionId === "promo-bundle-deal",
+    );
+
+    expect(summer?.reviewStatus).toBe("approved");
+    expect(summer?.reserveCoverageRatio).toBeGreaterThan(1);
+    expect(bundle?.reviewStatus).toBe("approved");
+    expect(bundle?.reserveCoverageRatio).toBeGreaterThan(1);
   });
 });
