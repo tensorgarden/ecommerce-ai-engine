@@ -14,6 +14,7 @@ import {
   getPromotionBreakEvenSnapshots,
   getPromotionAudienceFitReviews,
   getPromotionLeakageReviews,
+  getPromotionAbuseReviews,
   getPromotionReturnRiskReviews,
   getPromotionStackingRisks,
 } from "@/lib/demo-data";
@@ -555,5 +556,39 @@ describe("PromotionReturnRiskReviews", () => {
     expect(summer?.reserveCoverageRatio).toBeGreaterThan(1);
     expect(bundle?.reviewStatus).toBe("approved");
     expect(bundle?.reserveCoverageRatio).toBeGreaterThan(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 16. Promotion coordinated-account abuse guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionAbuseReviews", () => {
+  it("returns one abuse review per promotion", () => {
+    const reviews = getPromotionAbuseReviews();
+    expect(reviews).toHaveLength(promotions.length);
+  });
+
+  it("blocks promotional value when identity overlap and signup velocity combine", () => {
+    const review = getPromotionAbuseReviews().find(
+      (item) => item.promotionId === "promo-free-ship",
+    );
+
+    expect(review?.reviewStatus).toBe("blocked");
+    expect(review?.linkedIdentityRedemptionRate).toBeGreaterThanOrEqual(20);
+    expect(review?.rapidSignupRedemptionRate).toBeGreaterThanOrEqual(25);
+    expect(review?.reason).toContain("identity verification");
+  });
+
+  it("review-gates moderate signals without treating one signal as proven abuse", () => {
+    const review = getPromotionAbuseReviews().find(
+      (item) => item.promotionId === "promo-beauty-bogo",
+    );
+    const approved = getPromotionAbuseReviews().find(
+      (item) => item.promotionId === "promo-bundle-deal",
+    );
+
+    expect(review?.reviewStatus).toBe("review_required");
+    expect(approved?.reviewStatus).toBe("approved");
+    expect(approved?.verifiedIdentityCoverage).toBeGreaterThanOrEqual(85);
   });
 });

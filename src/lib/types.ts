@@ -93,6 +93,12 @@ export interface PromotionReturnExposure {
   reverseLogisticsCostPerReturn: number;
 }
 
+export interface PromotionAbuseSignals {
+  linkedIdentityRedemptionRate: number; // % tied to a device/payment identity used by another account
+  rapidSignupRedemptionRate: number; // % redeemed within 60 seconds of account creation
+  verifiedIdentityCoverage: number; // % backed by verified phone, payment, or address identity
+}
+
 export type PromotionRedemptionChannel =
   | "email"
   | "sms"
@@ -134,6 +140,7 @@ export interface Promotion {
   costExposure: PromotionCostExposure;
   returnExposure: PromotionReturnExposure;
   redemptionControl: PromotionRedemptionControl;
+  abuseSignals: PromotionAbuseSignals;
   audienceIntent: PromotionAudienceIntent;
   targetSegments: string[]; // customer segment IDs or "all"
   excludedSegments: string[]; // customer segment IDs withheld from the offer
@@ -154,6 +161,16 @@ export interface PromotionLeakageReview {
   controlStatus: "approved" | "review_required" | "blocked";
   leakageRate: number;
   exposedLeakageChannels: PromotionRedemptionChannel[];
+  reason: string;
+}
+
+export interface PromotionAbuseReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  linkedIdentityRedemptionRate: number;
+  rapidSignupRedemptionRate: number;
+  verifiedIdentityCoverage: number;
   reason: string;
 }
 

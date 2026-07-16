@@ -7,6 +7,7 @@ import type {
   Promotion,
   PromotionAudienceFitReview,
   PromotionLeakageReview,
+  PromotionAbuseReview,
   PromotionReturnRiskReview,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
@@ -700,6 +701,11 @@ export const promotions: Promotion[] = [
       estimatedLeakageRate: 8,
       maxRedemptionsPerCustomer: 1,
     },
+    abuseSignals: {
+      linkedIdentityRedemptionRate: 6,
+      rapidSignupRedemptionRate: 8,
+      verifiedIdentityCoverage: 93,
+    },
   },
   {
     id: "promo-free-ship",
@@ -735,6 +741,11 @@ export const promotions: Promotion[] = [
       distributionChannels: ["onsite_banner", "coupon_extension"],
       estimatedLeakageRate: 32,
       maxRedemptionsPerCustomer: 5,
+    },
+    abuseSignals: {
+      linkedIdentityRedemptionRate: 27,
+      rapidSignupRedemptionRate: 34,
+      verifiedIdentityCoverage: 48,
     },
   },
   {
@@ -772,6 +783,11 @@ export const promotions: Promotion[] = [
       estimatedLeakageRate: 4,
       maxRedemptionsPerCustomer: 1,
     },
+    abuseSignals: {
+      linkedIdentityRedemptionRate: 3,
+      rapidSignupRedemptionRate: 5,
+      verifiedIdentityCoverage: 96,
+    },
   },
   {
     id: "promo-beauty-bogo",
@@ -808,6 +824,11 @@ export const promotions: Promotion[] = [
       estimatedLeakageRate: 12,
       maxRedemptionsPerCustomer: 2,
     },
+    abuseSignals: {
+      linkedIdentityRedemptionRate: 12,
+      rapidSignupRedemptionRate: 19,
+      verifiedIdentityCoverage: 78,
+    },
   },
   {
     id: "promo-loyalty-bonus",
@@ -843,6 +864,11 @@ export const promotions: Promotion[] = [
       distributionChannels: ["loyalty_portal", "coupon_extension"],
       estimatedLeakageRate: 18,
       maxRedemptionsPerCustomer: 3,
+    },
+    abuseSignals: {
+      linkedIdentityRedemptionRate: 9,
+      rapidSignupRedemptionRate: 12,
+      verifiedIdentityCoverage: 88,
     },
   },
 ];
@@ -1132,6 +1158,61 @@ export function getPromotionLeakageReviews(): PromotionLeakageReview[] {
         leakageReviewRank[a.controlStatus] -
         leakageReviewRank[b.controlStatus];
       return rank === 0 ? b.leakageRate - a.leakageRate : rank;
+    });
+}
+
+const abuseReviewRank: Record<PromotionAbuseReview["reviewStatus"], number> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Coordinated-account guardrail for promotions. Device/payment identity overlap,
+ * immediate post-signup redemption, and weak verification are evaluated together
+ * so one household signal alone does not label a legitimate customer as abuse.
+ */
+export function getPromotionAbuseReviews(): PromotionAbuseReview[] {
+  return promotions
+    .map((promo) => {
+      const {
+        linkedIdentityRedemptionRate,
+        rapidSignupRedemptionRate,
+        verifiedIdentityCoverage,
+      } = promo.abuseSignals;
+      const coordinatedAccountRisk = linkedIdentityRedemptionRate >= 20;
+      const highVelocity = rapidSignupRedemptionRate >= 25;
+      const lowVerification = verifiedIdentityCoverage < 70;
+      const reviewStatus: PromotionAbuseReview["reviewStatus"] =
+        coordinatedAccountRisk && (highVelocity || lowVerification)
+          ? "blocked"
+          : linkedIdentityRedemptionRate >= 10 ||
+              rapidSignupRedemptionRate >= 15 ||
+              verifiedIdentityCoverage < 85
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Coordinated identity overlap and signup velocity exceed the release gate; require identity verification before granting promotional value."
+          : reviewStatus === "review_required"
+            ? "Account-linkage, redemption velocity, or verification coverage needs a fraud review before the promotion scales."
+            : "Identity linkage and redemption velocity are low with strong verification coverage.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        linkedIdentityRedemptionRate,
+        rapidSignupRedemptionRate,
+        verifiedIdentityCoverage,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank = abuseReviewRank[a.reviewStatus] - abuseReviewRank[b.reviewStatus];
+      return rank === 0
+        ? b.linkedIdentityRedemptionRate - a.linkedIdentityRedemptionRate
+        : rank;
     });
 }
 
