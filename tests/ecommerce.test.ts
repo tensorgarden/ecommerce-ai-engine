@@ -16,6 +16,7 @@ import {
   getPromotionLeakageReviews,
   getPromotionAbuseReviews,
   getPromotionReturnRiskReviews,
+  getPromotionInventoryReadinessReviews,
   getPromotionStackingRisks,
 } from "@/lib/demo-data";
 
@@ -590,5 +591,38 @@ describe("PromotionAbuseReviews", () => {
     expect(review?.reviewStatus).toBe("review_required");
     expect(approved?.reviewStatus).toBe("approved");
     expect(approved?.verifiedIdentityCoverage).toBeGreaterThanOrEqual(85);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 17. Promotion inventory readiness guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionInventoryReadinessReviews", () => {
+  it("returns one inventory-readiness review per promotion", () => {
+    const reviews = getPromotionInventoryReadinessReviews();
+    expect(reviews).toHaveLength(promotions.length);
+  });
+
+  it("blocks campaigns that include critically constrained products", () => {
+    const review = getPromotionInventoryReadinessReviews().find(
+      (item) => item.promotionId === "promo-beauty-bogo",
+    );
+
+    expect(review?.reviewStatus).toBe("blocked");
+    expect(review?.atRiskProductIds).toEqual(
+      expect.arrayContaining(["prod-014", "prod-016"]),
+    );
+    expect(review?.minimumDaysOfStockRemaining).toBe(3);
+    expect(review?.reason).toContain("confirm replenishment");
+  });
+
+  it("review-gates high-risk stock without overstating it as critical", () => {
+    const review = getPromotionInventoryReadinessReviews().find(
+      (item) => item.promotionId === "promo-summer-sale",
+    );
+
+    expect(review?.reviewStatus).toBe("review_required");
+    expect(review?.atRiskProductIds).toEqual(["prod-011"]);
+    expect(review?.minimumDaysOfStockRemaining).toBe(6);
   });
 });

@@ -9,6 +9,7 @@ import type {
   PromotionLeakageReview,
   PromotionAbuseReview,
   PromotionReturnRiskReview,
+  PromotionInventoryReadinessReview,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
   PromotionStackingRisk,
@@ -1338,5 +1339,74 @@ export function getPromotionReturnRiskReviews(): PromotionReturnRiskReview[] {
       return rank === 0
         ? b.expectedReturnRate - a.expectedReturnRate
         : rank;
+    });
+}
+
+const inventoryReadinessRank: Record<
+  PromotionInventoryReadinessReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Inventory preflight for promotions. Current demand and stock signals should
+ * be checked before a campaign accelerates constrained SKUs into a stockout.
+ */
+export function getPromotionInventoryReadinessReviews(): PromotionInventoryReadinessReview[] {
+  return promotions
+    .map((promo) => {
+      const sitewide = promo.applicableProducts.includes("all");
+      const applicableProductIds = new Set(promo.applicableProducts);
+      const scopedForecasts = inventoryForecasts.filter(
+        (forecast) => sitewide || applicableProductIds.has(forecast.productId),
+      );
+      const criticalForecasts = scopedForecasts.filter(
+        (forecast) => forecast.stockoutRisk === "critical",
+      );
+      const highForecasts = scopedForecasts.filter(
+        (forecast) => forecast.stockoutRisk === "high",
+      );
+      const atRiskForecasts = [...criticalForecasts, ...highForecasts];
+      const reviewStatus: PromotionInventoryReadinessReview["reviewStatus"] =
+        criticalForecasts.length > 0
+          ? "blocked"
+          : highForecasts.length > 0
+            ? "review_required"
+            : "approved";
+      const minimumDaysOfStockRemaining =
+        scopedForecasts.length === 0
+          ? null
+          : Math.min(
+              ...scopedForecasts.map((forecast) => forecast.daysOfStockRemaining),
+            );
+      const reason =
+        reviewStatus === "blocked"
+          ? "Promotion scope includes critically constrained inventory; exclude those SKUs or confirm replenishment before launch."
+          : reviewStatus === "review_required"
+            ? "Promotion scope includes high stockout-risk inventory; review demand lift and replenishment timing before launch."
+            : "Promotion scope has no high or critical stockout signal in the current forecast.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        atRiskProductIds: atRiskForecasts.map((forecast) => forecast.productId),
+        minimumDaysOfStockRemaining,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        inventoryReadinessRank[a.reviewStatus] -
+        inventoryReadinessRank[b.reviewStatus];
+      if (rank !== 0) return rank;
+
+      return (
+        (a.minimumDaysOfStockRemaining ?? Number.POSITIVE_INFINITY) -
+        (b.minimumDaysOfStockRemaining ?? Number.POSITIVE_INFINITY)
+      );
     });
 }

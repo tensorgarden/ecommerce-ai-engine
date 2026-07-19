@@ -184,6 +184,15 @@ export interface PromotionReturnRiskReview {
   reason: string;
 }
 
+export interface PromotionInventoryReadinessReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  atRiskProductIds: string[];
+  minimumDaysOfStockRemaining: number | null;
+  reason: string;
+}
+
 export interface PromotionProfitabilitySnapshot {
   promotionId: string;
   name: string;
