@@ -93,6 +93,12 @@ export interface PromotionReturnExposure {
   reverseLogisticsCostPerReturn: number;
 }
 
+export interface PromotionDemandShiftSignals {
+  stockpilingRate: number; // % of influenced orders estimated as forward buying
+  projectedPostPromotionDip: number; // % below baseline after the offer ends
+  baselineRecoveryDays: number;
+}
+
 export interface PromotionAbuseSignals {
   linkedIdentityRedemptionRate: number; // % tied to a device/payment identity used by another account
   rapidSignupRedemptionRate: number; // % redeemed within 60 seconds of account creation
@@ -139,6 +145,7 @@ export interface Promotion {
   incrementalRevenue: number; // revenue after subtracting cannibalized baseline
   costExposure: PromotionCostExposure;
   returnExposure: PromotionReturnExposure;
+  demandShiftSignals: PromotionDemandShiftSignals;
   redemptionControl: PromotionRedemptionControl;
   abuseSignals: PromotionAbuseSignals;
   audienceIntent: PromotionAudienceIntent;
@@ -190,6 +197,16 @@ export interface PromotionInventoryReadinessReview {
   reviewStatus: "approved" | "review_required" | "blocked";
   atRiskProductIds: string[];
   minimumDaysOfStockRemaining: number | null;
+  reason: string;
+}
+
+export interface PromotionDemandPullForwardReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  stockpilingRate: number;
+  projectedPostPromotionDip: number;
+  baselineRecoveryDays: number;
   reason: string;
 }
 

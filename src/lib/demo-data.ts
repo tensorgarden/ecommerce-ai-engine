@@ -10,6 +10,7 @@ import type {
   PromotionAbuseReview,
   PromotionReturnRiskReview,
   PromotionInventoryReadinessReview,
+  PromotionDemandPullForwardReview,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
   PromotionStackingRisk,
@@ -696,6 +697,11 @@ export const promotions: Promotion[] = [
       expectedReturnRate: 12,
       reverseLogisticsCostPerReturn: 14,
     },
+    demandShiftSignals: {
+      stockpilingRate: 14,
+      projectedPostPromotionDip: 8,
+      baselineRecoveryDays: 7,
+    },
     redemptionControl: {
       codeStrategy: "segment_locked",
       distributionChannels: ["email", "onsite_banner"],
@@ -736,6 +742,11 @@ export const promotions: Promotion[] = [
     returnExposure: {
       expectedReturnRate: 22,
       reverseLogisticsCostPerReturn: 13,
+    },
+    demandShiftSignals: {
+      stockpilingRate: 38,
+      projectedPostPromotionDip: 26,
+      baselineRecoveryDays: 28,
     },
     redemptionControl: {
       codeStrategy: "public_code",
@@ -778,6 +789,11 @@ export const promotions: Promotion[] = [
       expectedReturnRate: 8,
       reverseLogisticsCostPerReturn: 12,
     },
+    demandShiftSignals: {
+      stockpilingRate: 9,
+      projectedPostPromotionDip: 5,
+      baselineRecoveryDays: 5,
+    },
     redemptionControl: {
       codeStrategy: "single_use",
       distributionChannels: ["email", "sms"],
@@ -819,6 +835,11 @@ export const promotions: Promotion[] = [
       expectedReturnRate: 16,
       reverseLogisticsCostPerReturn: 10,
     },
+    demandShiftSignals: {
+      stockpilingRate: 24,
+      projectedPostPromotionDip: 16,
+      baselineRecoveryDays: 14,
+    },
     redemptionControl: {
       codeStrategy: "segment_locked",
       distributionChannels: ["email", "affiliate_network"],
@@ -859,6 +880,11 @@ export const promotions: Promotion[] = [
     returnExposure: {
       expectedReturnRate: 19,
       reverseLogisticsCostPerReturn: 14,
+    },
+    demandShiftSignals: {
+      stockpilingRate: 42,
+      projectedPostPromotionDip: 30,
+      baselineRecoveryDays: 35,
     },
     redemptionControl: {
       codeStrategy: "segment_locked",
@@ -1408,5 +1434,65 @@ export function getPromotionInventoryReadinessReviews(): PromotionInventoryReadi
         (a.minimumDaysOfStockRemaining ?? Number.POSITIVE_INFINITY) -
         (b.minimumDaysOfStockRemaining ?? Number.POSITIVE_INFINITY)
       );
+    });
+}
+
+const demandPullForwardReviewRank: Record<
+  PromotionDemandPullForwardReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Post-promotion demand-displacement check. A sales spike can be borrowed from
+ * future periods when customers stockpile, so projected demand dips and slow
+ * baseline recovery are reviewed before apparent lift is treated as incremental.
+ */
+export function getPromotionDemandPullForwardReviews(): PromotionDemandPullForwardReview[] {
+  return promotions
+    .map((promo) => {
+      const {
+        stockpilingRate,
+        projectedPostPromotionDip,
+        baselineRecoveryDays,
+      } = promo.demandShiftSignals;
+      const severeStockpiling = stockpilingRate >= 30;
+      const prolongedDisplacement =
+        projectedPostPromotionDip >= 20 || baselineRecoveryDays > 21;
+      const reviewStatus: PromotionDemandPullForwardReview["reviewStatus"] =
+        severeStockpiling && prolongedDisplacement
+          ? "blocked"
+          : stockpilingRate >= 15 ||
+              projectedPostPromotionDip >= 10 ||
+              baselineRecoveryDays > 14
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Projected post-promotion dip indicates substantial demand was pulled forward; hold incremental-lift credit until the baseline recovers."
+          : reviewStatus === "review_required"
+            ? "Stockpiling or a post-promotion demand dip needs a holdout and recovery-window review before lift is treated as incremental."
+            : "Projected demand displacement is limited and baseline recovery stays within the review window.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        stockpilingRate,
+        projectedPostPromotionDip,
+        baselineRecoveryDays,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        demandPullForwardReviewRank[a.reviewStatus] -
+        demandPullForwardReviewRank[b.reviewStatus];
+      return rank === 0
+        ? b.projectedPostPromotionDip - a.projectedPostPromotionDip
+        : rank;
     });
 }

@@ -17,6 +17,7 @@ import {
   getPromotionAbuseReviews,
   getPromotionReturnRiskReviews,
   getPromotionInventoryReadinessReviews,
+  getPromotionDemandPullForwardReviews,
   getPromotionStackingRisks,
 } from "@/lib/demo-data";
 
@@ -624,5 +625,45 @@ describe("PromotionInventoryReadinessReviews", () => {
     expect(review?.reviewStatus).toBe("review_required");
     expect(review?.atRiskProductIds).toEqual(["prod-011"]);
     expect(review?.minimumDaysOfStockRemaining).toBe(6);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 18. Promotion demand pull-forward guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionDemandPullForwardReviews", () => {
+  it("returns one demand-displacement review per promotion", () => {
+    const reviews = getPromotionDemandPullForwardReviews();
+    expect(reviews).toHaveLength(promotions.length);
+  });
+
+  it("blocks apparent lift when stockpiling predicts a prolonged post-promo dip", () => {
+    const reviews = getPromotionDemandPullForwardReviews();
+    const blockedIds = reviews
+      .filter((review) => review.reviewStatus === "blocked")
+      .map((review) => review.promotionId);
+    const freeShipping = reviews.find(
+      (review) => review.promotionId === "promo-free-ship",
+    );
+
+    expect(blockedIds).toEqual(
+      expect.arrayContaining(["promo-free-ship", "promo-loyalty-bonus"]),
+    );
+    expect(freeShipping?.projectedPostPromotionDip).toBeGreaterThanOrEqual(20);
+    expect(freeShipping?.reason).toContain("baseline recovers");
+  });
+
+  it("review-gates moderate displacement while approving limited demand shifts", () => {
+    const reviews = getPromotionDemandPullForwardReviews();
+    const beauty = reviews.find(
+      (review) => review.promotionId === "promo-beauty-bogo",
+    );
+    const bundle = reviews.find(
+      (review) => review.promotionId === "promo-bundle-deal",
+    );
+
+    expect(beauty?.reviewStatus).toBe("review_required");
+    expect(bundle?.reviewStatus).toBe("approved");
+    expect(bundle?.baselineRecoveryDays).toBeLessThanOrEqual(14);
   });
 });
