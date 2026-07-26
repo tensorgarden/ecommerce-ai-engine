@@ -18,6 +18,7 @@ import {
   getPromotionReturnRiskReviews,
   getPromotionInventoryReadinessReviews,
   getPromotionDemandPullForwardReviews,
+  getPromotionFulfillmentCostReviews,
   getPromotionStackingRisks,
 } from "@/lib/demo-data";
 
@@ -665,5 +666,46 @@ describe("PromotionDemandPullForwardReviews", () => {
     expect(beauty?.reviewStatus).toBe("review_required");
     expect(bundle?.reviewStatus).toBe("approved");
     expect(bundle?.baselineRecoveryDays).toBeLessThanOrEqual(14);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 19. Promotion fulfillment subsidy coverage
+// ---------------------------------------------------------------------------
+describe("PromotionFulfillmentCostReviews", () => {
+  it("returns one fulfillment-cost review per promotion", () => {
+    const reviews = getPromotionFulfillmentCostReviews();
+    expect(reviews).toHaveLength(promotions.length);
+  });
+
+  it("blocks free shipping when split shipments exceed the reserved subsidy", () => {
+    const review = getPromotionFulfillmentCostReviews().find(
+      (item) => item.promotionId === "promo-free-ship",
+    );
+
+    expect(review?.reviewStatus).toBe("blocked");
+    expect(review?.splitShipmentRate).toBe(32);
+    expect(review?.projectedFulfillmentCost).toBeGreaterThan(
+      review?.reservedSubsidy ?? Number.POSITIVE_INFINITY,
+    );
+    expect(review?.subsidyCoverageRatio).toBeLessThan(0.8);
+    expect(review?.reason).toContain("fund the gap");
+  });
+
+  it("review-gates a small subsidy gap and approves fully covered fulfillment", () => {
+    const reviews = getPromotionFulfillmentCostReviews();
+    const beauty = reviews.find(
+      (item) => item.promotionId === "promo-beauty-bogo",
+    );
+    const bundle = reviews.find(
+      (item) => item.promotionId === "promo-bundle-deal",
+    );
+
+    expect(beauty?.reviewStatus).toBe("review_required");
+    expect(beauty?.subsidyCoverageRatio).toBeLessThan(1);
+    expect(bundle?.reviewStatus).toBe("approved");
+    expect(bundle?.requiredSubsidy).toBeLessThanOrEqual(
+      bundle?.reservedSubsidy ?? 0,
+    );
   });
 });

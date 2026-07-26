@@ -99,6 +99,12 @@ export interface PromotionDemandShiftSignals {
   baselineRecoveryDays: number;
 }
 
+export interface PromotionFulfillmentSignals {
+  splitShipmentRate: number; // % of orders expected to require an extra shipment
+  averageCostPerShipment: number;
+  averageCustomerShippingContribution: number; // per influenced order
+}
+
 export interface PromotionAbuseSignals {
   linkedIdentityRedemptionRate: number; // % tied to a device/payment identity used by another account
   rapidSignupRedemptionRate: number; // % redeemed within 60 seconds of account creation
@@ -146,6 +152,7 @@ export interface Promotion {
   costExposure: PromotionCostExposure;
   returnExposure: PromotionReturnExposure;
   demandShiftSignals: PromotionDemandShiftSignals;
+  fulfillmentSignals: PromotionFulfillmentSignals;
   redemptionControl: PromotionRedemptionControl;
   abuseSignals: PromotionAbuseSignals;
   audienceIntent: PromotionAudienceIntent;
@@ -207,6 +214,20 @@ export interface PromotionDemandPullForwardReview {
   stockpilingRate: number;
   projectedPostPromotionDip: number;
   baselineRecoveryDays: number;
+  reason: string;
+}
+
+export interface PromotionFulfillmentCostReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  splitShipmentRate: number;
+  projectedShipmentCount: number;
+  projectedFulfillmentCost: number;
+  projectedCustomerContribution: number;
+  requiredSubsidy: number;
+  reservedSubsidy: number;
+  subsidyCoverageRatio: number;
   reason: string;
 }
 

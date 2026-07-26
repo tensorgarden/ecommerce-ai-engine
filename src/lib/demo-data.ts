@@ -11,6 +11,7 @@ import type {
   PromotionReturnRiskReview,
   PromotionInventoryReadinessReview,
   PromotionDemandPullForwardReview,
+  PromotionFulfillmentCostReview,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
   PromotionStackingRisk,
@@ -702,6 +703,11 @@ export const promotions: Promotion[] = [
       projectedPostPromotionDip: 8,
       baselineRecoveryDays: 7,
     },
+    fulfillmentSignals: {
+      splitShipmentRate: 8,
+      averageCostPerShipment: 8,
+      averageCustomerShippingContribution: 7,
+    },
     redemptionControl: {
       codeStrategy: "segment_locked",
       distributionChannels: ["email", "onsite_banner"],
@@ -747,6 +753,11 @@ export const promotions: Promotion[] = [
       stockpilingRate: 38,
       projectedPostPromotionDip: 26,
       baselineRecoveryDays: 28,
+    },
+    fulfillmentSignals: {
+      splitShipmentRate: 32,
+      averageCostPerShipment: 8.25,
+      averageCustomerShippingContribution: 0,
     },
     redemptionControl: {
       codeStrategy: "public_code",
@@ -794,6 +805,11 @@ export const promotions: Promotion[] = [
       projectedPostPromotionDip: 5,
       baselineRecoveryDays: 5,
     },
+    fulfillmentSignals: {
+      splitShipmentRate: 12,
+      averageCostPerShipment: 7.25,
+      averageCustomerShippingContribution: 5.5,
+    },
     redemptionControl: {
       codeStrategy: "single_use",
       distributionChannels: ["email", "sms"],
@@ -840,6 +856,11 @@ export const promotions: Promotion[] = [
       projectedPostPromotionDip: 16,
       baselineRecoveryDays: 14,
     },
+    fulfillmentSignals: {
+      splitShipmentRate: 18,
+      averageCostPerShipment: 6.8,
+      averageCustomerShippingContribution: 6.75,
+    },
     redemptionControl: {
       codeStrategy: "segment_locked",
       distributionChannels: ["email", "affiliate_network"],
@@ -885,6 +906,11 @@ export const promotions: Promotion[] = [
       stockpilingRate: 42,
       projectedPostPromotionDip: 30,
       baselineRecoveryDays: 35,
+    },
+    fulfillmentSignals: {
+      splitShipmentRate: 20,
+      averageCostPerShipment: 7.5,
+      averageCustomerShippingContribution: 5.5,
     },
     redemptionControl: {
       codeStrategy: "segment_locked",
@@ -1493,6 +1519,86 @@ export function getPromotionDemandPullForwardReviews(): PromotionDemandPullForwa
         demandPullForwardReviewRank[b.reviewStatus];
       return rank === 0
         ? b.projectedPostPromotionDip - a.projectedPostPromotionDip
+        : rank;
+    });
+}
+
+const fulfillmentCostReviewRank: Record<
+  PromotionFulfillmentCostReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Fulfillment-cost preflight for promotions. Split shipments increase the
+ * carrier and pick-and-pack cost behind an offer, so the configured shipping
+ * subsidy must cover the projected cost after customer contributions.
+ */
+export function getPromotionFulfillmentCostReviews(): PromotionFulfillmentCostReview[] {
+  return promotions
+    .map((promo) => {
+      const {
+        splitShipmentRate,
+        averageCostPerShipment,
+        averageCustomerShippingContribution,
+      } = promo.fulfillmentSignals;
+      const projectedShipmentCount =
+        promo.ordersInfluenced * (1 + splitShipmentRate / 100);
+      const projectedFulfillmentCost =
+        projectedShipmentCount * averageCostPerShipment;
+      const projectedCustomerContribution =
+        promo.ordersInfluenced * averageCustomerShippingContribution;
+      const requiredSubsidy = Math.max(
+        projectedFulfillmentCost - projectedCustomerContribution,
+        0,
+      );
+      const reservedSubsidy = promo.costExposure.fulfillmentSubsidies;
+      const subsidyCoverageRatio =
+        requiredSubsidy === 0
+          ? Number.POSITIVE_INFINITY
+          : reservedSubsidy / requiredSubsidy;
+      const underfunded = subsidyCoverageRatio < 1;
+      const severelyUnderfunded = subsidyCoverageRatio < 0.8;
+      const highSplitShipmentRate = splitShipmentRate >= 20;
+      const reviewStatus: PromotionFulfillmentCostReview["reviewStatus"] =
+        underfunded &&
+        (severelyUnderfunded ||
+          highSplitShipmentRate ||
+          promo.type === "free_shipping")
+          ? "blocked"
+          : underfunded || splitShipmentRate >= 15
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Projected split-shipment costs exceed the reserved subsidy; narrow the shipping scope or fund the gap before launch."
+          : reviewStatus === "review_required"
+            ? "Fulfillment coverage or split-shipment exposure needs an operations review before the promotion scales."
+            : "Customer contributions and the reserved subsidy cover the projected fulfillment cost.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        splitShipmentRate,
+        projectedShipmentCount,
+        projectedFulfillmentCost,
+        projectedCustomerContribution,
+        requiredSubsidy,
+        reservedSubsidy,
+        subsidyCoverageRatio,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        fulfillmentCostReviewRank[a.reviewStatus] -
+        fulfillmentCostReviewRank[b.reviewStatus];
+      return rank === 0
+        ? a.subsidyCoverageRatio - b.subsidyCoverageRatio
         : rank;
     });
 }
