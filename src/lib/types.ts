@@ -103,6 +103,8 @@ export interface PromotionFulfillmentSignals {
   splitShipmentRate: number; // % of orders expected to require an extra shipment
   averageCostPerShipment: number;
   averageCustomerShippingContribution: number; // per influenced order
+  remoteZoneOrderRate: number; // % shipping to high-cost or remote carrier zones
+  dimensionalWeightOrderRate: number; // % billed above actual weight due to package size
 }
 
 export interface PromotionAbuseSignals {
@@ -228,6 +230,15 @@ export interface PromotionFulfillmentCostReview {
   requiredSubsidy: number;
   reservedSubsidy: number;
   subsidyCoverageRatio: number;
+  reason: string;
+}
+
+export interface PromotionShippingOutlierReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  remoteZoneOrderRate: number;
+  dimensionalWeightOrderRate: number;
   reason: string;
 }
 

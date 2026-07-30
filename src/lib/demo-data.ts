@@ -12,6 +12,7 @@ import type {
   PromotionInventoryReadinessReview,
   PromotionDemandPullForwardReview,
   PromotionFulfillmentCostReview,
+  PromotionShippingOutlierReview,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
   PromotionStackingRisk,
@@ -707,6 +708,8 @@ export const promotions: Promotion[] = [
       splitShipmentRate: 8,
       averageCostPerShipment: 8,
       averageCustomerShippingContribution: 7,
+      remoteZoneOrderRate: 8,
+      dimensionalWeightOrderRate: 6,
     },
     redemptionControl: {
       codeStrategy: "segment_locked",
@@ -758,6 +761,8 @@ export const promotions: Promotion[] = [
       splitShipmentRate: 32,
       averageCostPerShipment: 8.25,
       averageCustomerShippingContribution: 0,
+      remoteZoneOrderRate: 34,
+      dimensionalWeightOrderRate: 24,
     },
     redemptionControl: {
       codeStrategy: "public_code",
@@ -809,6 +814,8 @@ export const promotions: Promotion[] = [
       splitShipmentRate: 12,
       averageCostPerShipment: 7.25,
       averageCustomerShippingContribution: 5.5,
+      remoteZoneOrderRate: 12,
+      dimensionalWeightOrderRate: 16,
     },
     redemptionControl: {
       codeStrategy: "single_use",
@@ -860,6 +867,8 @@ export const promotions: Promotion[] = [
       splitShipmentRate: 18,
       averageCostPerShipment: 6.8,
       averageCustomerShippingContribution: 6.75,
+      remoteZoneOrderRate: 18,
+      dimensionalWeightOrderRate: 8,
     },
     redemptionControl: {
       codeStrategy: "segment_locked",
@@ -911,6 +920,8 @@ export const promotions: Promotion[] = [
       splitShipmentRate: 20,
       averageCostPerShipment: 7.5,
       averageCustomerShippingContribution: 5.5,
+      remoteZoneOrderRate: 10,
+      dimensionalWeightOrderRate: 9,
     },
     redemptionControl: {
       codeStrategy: "segment_locked",
@@ -1600,5 +1611,61 @@ export function getPromotionFulfillmentCostReviews(): PromotionFulfillmentCostRe
       return rank === 0
         ? a.subsidyCoverageRatio - b.subsidyCoverageRatio
         : rank;
+    });
+}
+
+const shippingOutlierReviewRank: Record<
+  PromotionShippingOutlierReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Shipping-scope preflight for promotions. Carrier distance and dimensional
+ * weight can turn a flat or free-shipping promise into a margin outlier even
+ * when average fulfillment coverage appears adequate.
+ */
+export function getPromotionShippingOutlierReviews(): PromotionShippingOutlierReview[] {
+  return promotions
+    .map((promo) => {
+      const { remoteZoneOrderRate, dimensionalWeightOrderRate } =
+        promo.fulfillmentSignals;
+      const severeZoneExposure = remoteZoneOrderRate >= 25;
+      const severeDimensionalExposure = dimensionalWeightOrderRate >= 20;
+      const reviewStatus: PromotionShippingOutlierReview["reviewStatus"] =
+        promo.type === "free_shipping" &&
+        (severeZoneExposure || severeDimensionalExposure)
+          ? "blocked"
+          : remoteZoneOrderRate >= 15 || dimensionalWeightOrderRate >= 12
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Free-shipping scope has material remote-zone or dimensional-weight exposure; add package and zone exclusions or price the surcharge before launch."
+          : reviewStatus === "review_required"
+            ? "Shipping-zone or package-size outliers need a carrier-rate review before the promotion scales."
+            : "Remote-zone and dimensional-weight exposure stay below the shipping review thresholds.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        remoteZoneOrderRate,
+        dimensionalWeightOrderRate,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        shippingOutlierReviewRank[a.reviewStatus] -
+        shippingOutlierReviewRank[b.reviewStatus];
+      if (rank !== 0) return rank;
+      return (
+        b.remoteZoneOrderRate + b.dimensionalWeightOrderRate -
+        (a.remoteZoneOrderRate + a.dimensionalWeightOrderRate)
+      );
     });
 }

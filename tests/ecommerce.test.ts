@@ -19,6 +19,7 @@ import {
   getPromotionInventoryReadinessReviews,
   getPromotionDemandPullForwardReviews,
   getPromotionFulfillmentCostReviews,
+  getPromotionShippingOutlierReviews,
   getPromotionStackingRisks,
 } from "@/lib/demo-data";
 
@@ -707,5 +708,44 @@ describe("PromotionFulfillmentCostReviews", () => {
     expect(bundle?.requiredSubsidy).toBeLessThanOrEqual(
       bundle?.reservedSubsidy ?? 0,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 20. Promotion shipping-zone and package-size outlier guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionShippingOutlierReviews", () => {
+  it("returns one shipping-outlier review per promotion with complete signals", () => {
+    const reviews = getPromotionShippingOutlierReviews();
+    expect(reviews).toHaveLength(promotions.length);
+    for (const promo of promotions) {
+      expect(promo.fulfillmentSignals.remoteZoneOrderRate).toBeGreaterThanOrEqual(0);
+      expect(
+        promo.fulfillmentSignals.dimensionalWeightOrderRate,
+      ).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("blocks free shipping with material zone and dimensional-weight exposure", () => {
+    const review = getPromotionShippingOutlierReviews().find(
+      (item) => item.promotionId === "promo-free-ship",
+    );
+    expect(review?.reviewStatus).toBe("blocked");
+    expect(review?.remoteZoneOrderRate).toBeGreaterThanOrEqual(25);
+    expect(review?.dimensionalWeightOrderRate).toBeGreaterThanOrEqual(20);
+    expect(review?.reason).toContain("zone exclusions");
+  });
+
+  it("review-gates package-size outliers while approving limited exposure", () => {
+    const reviews = getPromotionShippingOutlierReviews();
+    const bundle = reviews.find(
+      (item) => item.promotionId === "promo-bundle-deal",
+    );
+    const summer = reviews.find(
+      (item) => item.promotionId === "promo-summer-sale",
+    );
+    expect(bundle?.reviewStatus).toBe("review_required");
+    expect(bundle?.dimensionalWeightOrderRate).toBeGreaterThanOrEqual(12);
+    expect(summer?.reviewStatus).toBe("approved");
   });
 });
