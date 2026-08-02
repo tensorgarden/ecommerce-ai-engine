@@ -105,6 +105,8 @@ export interface PromotionFulfillmentSignals {
   averageCustomerShippingContribution: number; // per influenced order
   remoteZoneOrderRate: number; // % shipping to high-cost or remote carrier zones
   dimensionalWeightOrderRate: number; // % billed above actual weight due to package size
+  addressCorrectionOrderRate: number; // % likely to incur a carrier address-correction fee
+  returnToSenderOrderRate: number; // % likely to incur outbound plus return shipping
 }
 
 export interface PromotionAbuseSignals {
@@ -239,6 +241,15 @@ export interface PromotionShippingOutlierReview {
   reviewStatus: "approved" | "review_required" | "blocked";
   remoteZoneOrderRate: number;
   dimensionalWeightOrderRate: number;
+  reason: string;
+}
+
+export interface PromotionDeliveryExceptionReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  addressCorrectionOrderRate: number;
+  returnToSenderOrderRate: number;
   reason: string;
 }
 

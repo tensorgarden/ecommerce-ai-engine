@@ -20,6 +20,7 @@ import {
   getPromotionDemandPullForwardReviews,
   getPromotionFulfillmentCostReviews,
   getPromotionShippingOutlierReviews,
+  getPromotionDeliveryExceptionReviews,
   getPromotionStackingRisks,
 } from "@/lib/demo-data";
 
@@ -746,6 +747,38 @@ describe("PromotionShippingOutlierReviews", () => {
     );
     expect(bundle?.reviewStatus).toBe("review_required");
     expect(bundle?.dimensionalWeightOrderRate).toBeGreaterThanOrEqual(12);
+    expect(summer?.reviewStatus).toBe("approved");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 21. Promotion delivery-exception guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionDeliveryExceptionReviews", () => {
+  it("returns one delivery-exception review per promotion with complete signals", () => {
+    const reviews = getPromotionDeliveryExceptionReviews();
+    expect(reviews).toHaveLength(promotions.length);
+    for (const promo of promotions) {
+      expect(promo.fulfillmentSignals.addressCorrectionOrderRate).toBeGreaterThanOrEqual(0);
+      expect(promo.fulfillmentSignals.returnToSenderOrderRate).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("blocks free shipping when address failures create material exception freight", () => {
+    const review = getPromotionDeliveryExceptionReviews().find(
+      (item) => item.promotionId === "promo-free-ship",
+    );
+    expect(review?.reviewStatus).toBe("blocked");
+    expect(review?.addressCorrectionOrderRate).toBeGreaterThanOrEqual(5);
+    expect(review?.returnToSenderOrderRate).toBeGreaterThanOrEqual(2);
+    expect(review?.reason).toContain("validate addresses");
+  });
+
+  it("review-gates moderate exceptions while approving clean address traffic", () => {
+    const reviews = getPromotionDeliveryExceptionReviews();
+    const bundle = reviews.find((item) => item.promotionId === "promo-bundle-deal");
+    const summer = reviews.find((item) => item.promotionId === "promo-summer-sale");
+    expect(bundle?.reviewStatus).toBe("review_required");
     expect(summer?.reviewStatus).toBe("approved");
   });
 });

@@ -13,6 +13,7 @@ import type {
   PromotionDemandPullForwardReview,
   PromotionFulfillmentCostReview,
   PromotionShippingOutlierReview,
+  PromotionDeliveryExceptionReview,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
   PromotionStackingRisk,
@@ -710,6 +711,8 @@ export const promotions: Promotion[] = [
       averageCustomerShippingContribution: 7,
       remoteZoneOrderRate: 8,
       dimensionalWeightOrderRate: 6,
+      addressCorrectionOrderRate: 1,
+      returnToSenderOrderRate: 0.3,
     },
     redemptionControl: {
       codeStrategy: "segment_locked",
@@ -763,6 +766,8 @@ export const promotions: Promotion[] = [
       averageCustomerShippingContribution: 0,
       remoteZoneOrderRate: 34,
       dimensionalWeightOrderRate: 24,
+      addressCorrectionOrderRate: 7,
+      returnToSenderOrderRate: 2.5,
     },
     redemptionControl: {
       codeStrategy: "public_code",
@@ -816,6 +821,8 @@ export const promotions: Promotion[] = [
       averageCustomerShippingContribution: 5.5,
       remoteZoneOrderRate: 12,
       dimensionalWeightOrderRate: 16,
+      addressCorrectionOrderRate: 4,
+      returnToSenderOrderRate: 1,
     },
     redemptionControl: {
       codeStrategy: "single_use",
@@ -869,6 +876,8 @@ export const promotions: Promotion[] = [
       averageCustomerShippingContribution: 6.75,
       remoteZoneOrderRate: 18,
       dimensionalWeightOrderRate: 8,
+      addressCorrectionOrderRate: 3,
+      returnToSenderOrderRate: 0.8,
     },
     redemptionControl: {
       codeStrategy: "segment_locked",
@@ -922,6 +931,8 @@ export const promotions: Promotion[] = [
       averageCustomerShippingContribution: 5.5,
       remoteZoneOrderRate: 10,
       dimensionalWeightOrderRate: 9,
+      addressCorrectionOrderRate: 2,
+      returnToSenderOrderRate: 0.5,
     },
     redemptionControl: {
       codeStrategy: "segment_locked",
@@ -1666,6 +1677,61 @@ export function getPromotionShippingOutlierReviews(): PromotionShippingOutlierRe
       return (
         b.remoteZoneOrderRate + b.dimensionalWeightOrderRate -
         (a.remoteZoneOrderRate + a.dimensionalWeightOrderRate)
+      );
+    });
+}
+
+const deliveryExceptionReviewRank: Record<
+  PromotionDeliveryExceptionReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Pre-shipment address-quality gate for promotions. Carrier address corrections
+ * arrive as retroactive fees, while undeliverable parcels can create both
+ * outbound and return freight costs after top-line campaign ROI is reported.
+ */
+export function getPromotionDeliveryExceptionReviews(): PromotionDeliveryExceptionReview[] {
+  return promotions
+    .map((promo) => {
+      const { addressCorrectionOrderRate, returnToSenderOrderRate } =
+        promo.fulfillmentSignals;
+      const severeExceptionExposure =
+        addressCorrectionOrderRate >= 5 || returnToSenderOrderRate >= 2;
+      const reviewStatus: PromotionDeliveryExceptionReview["reviewStatus"] =
+        promo.type === "free_shipping" && severeExceptionExposure
+          ? "blocked"
+          : addressCorrectionOrderRate >= 3 || returnToSenderOrderRate >= 1
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Free-shipping scope has material address-correction or return-to-sender exposure; validate addresses and reserve exception freight before launch."
+          : reviewStatus === "review_required"
+            ? "Delivery exceptions need an address-quality and carrier-fee review before the promotion scales."
+            : "Address-correction and return-to-sender exposure stay below the delivery-exception thresholds.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        addressCorrectionOrderRate,
+        returnToSenderOrderRate,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        deliveryExceptionReviewRank[a.reviewStatus] -
+        deliveryExceptionReviewRank[b.reviewStatus];
+      if (rank !== 0) return rank;
+      return (
+        b.addressCorrectionOrderRate + b.returnToSenderOrderRate -
+        (a.addressCorrectionOrderRate + a.returnToSenderOrderRate)
       );
     });
 }
