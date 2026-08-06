@@ -115,6 +115,12 @@ export interface PromotionAbuseSignals {
   verifiedIdentityCoverage: number; // % backed by verified phone, payment, or address identity
 }
 
+export interface PromotionCadenceSignals {
+  daysDiscountedLast90: number; // days in the trailing 90 this scope sat at a promoted price
+  averageGapDaysBetweenOffers: number; // average full-price recovery gap between consecutive offers
+  repeatExposureRate: number; // % of influenced orders from buyers who redeemed any discount in the last 90 days
+}
+
 export type PromotionRedemptionChannel =
   | "email"
   | "sms"
@@ -159,6 +165,7 @@ export interface Promotion {
   fulfillmentSignals: PromotionFulfillmentSignals;
   redemptionControl: PromotionRedemptionControl;
   abuseSignals: PromotionAbuseSignals;
+  cadenceSignals: PromotionCadenceSignals;
   audienceIntent: PromotionAudienceIntent;
   targetSegments: string[]; // customer segment IDs or "all"
   excludedSegments: string[]; // customer segment IDs withheld from the offer
@@ -250,6 +257,16 @@ export interface PromotionDeliveryExceptionReview {
   reviewStatus: "approved" | "review_required" | "blocked";
   addressCorrectionOrderRate: number;
   returnToSenderOrderRate: number;
+  reason: string;
+}
+
+export interface PromotionCadenceReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  daysDiscountedLast90: number;
+  averageGapDaysBetweenOffers: number;
+  repeatExposureRate: number;
   reason: string;
 }
 

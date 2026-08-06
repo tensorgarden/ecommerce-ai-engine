@@ -21,6 +21,7 @@ import {
   getPromotionFulfillmentCostReviews,
   getPromotionShippingOutlierReviews,
   getPromotionDeliveryExceptionReviews,
+  getPromotionCadenceReviews,
   getPromotionStackingRisks,
 } from "@/lib/demo-data";
 
@@ -779,6 +780,42 @@ describe("PromotionDeliveryExceptionReviews", () => {
     const bundle = reviews.find((item) => item.promotionId === "promo-bundle-deal");
     const summer = reviews.find((item) => item.promotionId === "promo-summer-sale");
     expect(bundle?.reviewStatus).toBe("review_required");
+    expect(summer?.reviewStatus).toBe("approved");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 22. Promotion discount-cadence conditioning guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionCadenceReviews", () => {
+  it("returns one cadence review per promotion with complete signals", () => {
+    const reviews = getPromotionCadenceReviews();
+    expect(reviews).toHaveLength(promotions.length);
+    for (const promo of promotions) {
+      expect(promo.cadenceSignals.daysDiscountedLast90).toBeGreaterThanOrEqual(0);
+      expect(promo.cadenceSignals.daysDiscountedLast90).toBeLessThanOrEqual(90);
+      expect(promo.cadenceSignals.averageGapDaysBetweenOffers).toBeGreaterThanOrEqual(0);
+      expect(promo.cadenceSignals.repeatExposureRate).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("blocks near-continuous discounting that has reset the reference price", () => {
+    const review = getPromotionCadenceReviews().find(
+      (item) => item.promotionId === "promo-loyalty-bonus",
+    );
+    expect(review?.reviewStatus).toBe("blocked");
+    expect(review?.daysDiscountedLast90).toBeGreaterThanOrEqual(45);
+    expect(review?.averageGapDaysBetweenOffers).toBeLessThanOrEqual(7);
+    expect(review?.reason).toContain("reference price");
+  });
+
+  it("review-gates frequent cadence while approving infrequent offers", () => {
+    const reviews = getPromotionCadenceReviews();
+    const bogo = reviews.find((item) => item.promotionId === "promo-beauty-bogo");
+    const freeShip = reviews.find((item) => item.promotionId === "promo-free-ship");
+    const summer = reviews.find((item) => item.promotionId === "promo-summer-sale");
+    expect(bogo?.reviewStatus).toBe("review_required");
+    expect(freeShip?.reviewStatus).toBe("review_required");
     expect(summer?.reviewStatus).toBe("approved");
   });
 });

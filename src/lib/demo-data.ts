@@ -14,6 +14,7 @@ import type {
   PromotionFulfillmentCostReview,
   PromotionShippingOutlierReview,
   PromotionDeliveryExceptionReview,
+  PromotionCadenceReview,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
   PromotionStackingRisk,
@@ -725,6 +726,11 @@ export const promotions: Promotion[] = [
       rapidSignupRedemptionRate: 8,
       verifiedIdentityCoverage: 93,
     },
+    cadenceSignals: {
+      daysDiscountedLast90: 18,
+      averageGapDaysBetweenOffers: 21,
+      repeatExposureRate: 22,
+    },
   },
   {
     id: "promo-free-ship",
@@ -779,6 +785,11 @@ export const promotions: Promotion[] = [
       linkedIdentityRedemptionRate: 27,
       rapidSignupRedemptionRate: 34,
       verifiedIdentityCoverage: 48,
+    },
+    cadenceSignals: {
+      daysDiscountedLast90: 34,
+      averageGapDaysBetweenOffers: 6,
+      repeatExposureRate: 55,
     },
   },
   {
@@ -835,6 +846,11 @@ export const promotions: Promotion[] = [
       rapidSignupRedemptionRate: 5,
       verifiedIdentityCoverage: 96,
     },
+    cadenceSignals: {
+      daysDiscountedLast90: 12,
+      averageGapDaysBetweenOffers: 28,
+      repeatExposureRate: 15,
+    },
   },
   {
     id: "promo-beauty-bogo",
@@ -890,6 +906,11 @@ export const promotions: Promotion[] = [
       rapidSignupRedemptionRate: 19,
       verifiedIdentityCoverage: 78,
     },
+    cadenceSignals: {
+      daysDiscountedLast90: 36,
+      averageGapDaysBetweenOffers: 9,
+      repeatExposureRate: 47,
+    },
   },
   {
     id: "promo-loyalty-bonus",
@@ -944,6 +965,11 @@ export const promotions: Promotion[] = [
       linkedIdentityRedemptionRate: 9,
       rapidSignupRedemptionRate: 12,
       verifiedIdentityCoverage: 88,
+    },
+    cadenceSignals: {
+      daysDiscountedLast90: 85,
+      averageGapDaysBetweenOffers: 2,
+      repeatExposureRate: 71,
     },
   },
 ];
@@ -1733,5 +1759,63 @@ export function getPromotionDeliveryExceptionReviews(): PromotionDeliveryExcepti
         b.addressCorrectionOrderRate + b.returnToSenderOrderRate -
         (a.addressCorrectionOrderRate + a.returnToSenderOrderRate)
       );
+    });
+}
+
+const cadenceReviewRank: Record<
+  PromotionCadenceReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Discount-cadence conditioning gate for promotions. When a scope is promoted
+ * too often with short full-price gaps, the sale price becomes the reference
+ * price and buyers are trained to wait for the next discount instead of
+ * purchasing at list price.
+ */
+export function getPromotionCadenceReviews(): PromotionCadenceReview[] {
+  return promotions
+    .map((promo) => {
+      const {
+        daysDiscountedLast90,
+        averageGapDaysBetweenOffers,
+        repeatExposureRate,
+      } = promo.cadenceSignals;
+      const nearContinuousDiscounting =
+        daysDiscountedLast90 >= 45 && averageGapDaysBetweenOffers <= 7;
+      const reviewStatus: PromotionCadenceReview["reviewStatus"] =
+        nearContinuousDiscounting
+          ? "blocked"
+          : daysDiscountedLast90 >= 30 ||
+              averageGapDaysBetweenOffers <= 14 ||
+              repeatExposureRate >= 40
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Near-continuous discounting has reset the reference price; hold for a full-price reset window before relaunching."
+          : reviewStatus === "review_required"
+            ? "Frequent discount cadence risks training customers to wait for the next sale; require a cadence and holdout review before extending."
+            : "Discount cadence preserves full-price recovery gaps, so the reference price stays intact.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        daysDiscountedLast90,
+        averageGapDaysBetweenOffers,
+        repeatExposureRate,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        cadenceReviewRank[a.reviewStatus] - cadenceReviewRank[b.reviewStatus];
+      if (rank !== 0) return rank;
+      return b.repeatExposureRate - a.repeatExposureRate;
     });
 }
