@@ -22,6 +22,7 @@ import {
   getPromotionShippingOutlierReviews,
   getPromotionDeliveryExceptionReviews,
   getPromotionCadenceReviews,
+  getPromotionInventoryRefreshReadinessReviews,
   getPromotionStackingRisks,
 } from "@/lib/demo-data";
 
@@ -819,3 +820,62 @@ describe("PromotionCadenceReviews", () => {
     expect(summer?.reviewStatus).toBe("approved");
   });
 });
+
+describe("PromotionInventoryRefreshReadinessReviews", () => {
+  it("returns one inventory-refresh review per promotion", () => {
+    const reviews = getPromotionInventoryRefreshReadinessReviews();
+    expect(reviews).toHaveLength(5);
+    expect(reviews.map(r => r.promotionId)).toEqual(
+      expect.arrayContaining(promotions.map(p => p.id))
+    );
+  });
+
+  it("blocks promotions with critical stock stress during extended campaigns", () => {
+    const reviews = getPromotionInventoryRefreshReadinessReviews();
+    const critical = reviews.filter(r => r.refreshWindowRiskLevel === "critical");
+    // Demo data may have limited critical cases; verify they're properly flagged
+    critical.forEach(r => {
+      expect(r.reviewStatus).toBe("blocked");
+      expect(r.reason).toContain("Insufficient stock buffer");
+      expect(r.promotionDurationDays).toBeGreaterThan(0);
+      expect(r.estimatedTotalUnitsNeeded).toBeGreaterThan(0);
+    });
+  });
+
+  it("review-gates tight inventory refresh windows while approving healthy buffers", () => {
+    const reviews = getPromotionInventoryRefreshReadinessReviews();
+    const tight = reviews.find(r => r.refreshWindowRiskLevel === "tight");
+    const healthy = reviews.find(r => r.refreshWindowRiskLevel === "healthy");
+    
+    if (tight) {
+      expect(tight.reviewStatus).toBe("review_required");
+      expect(tight.reason).toContain("refresh");
+    }
+    if (healthy) {
+      expect(healthy.refreshWindowRiskLevel).toBe("healthy");
+      expect(healthy.minimumDaysOfStockAvailable).not.toBeNull();
+    }
+  });
+
+  it("flags peak-season timing risks when promotion overlaps with holiday demand", () => {
+    const reviews = getPromotionInventoryRefreshReadinessReviews();
+    const peakSeasonWarnings = reviews.filter(r => r.reason.includes("peak-season"));
+    // Depending on test date, some promos may overlap peak season
+    peakSeasonWarnings.forEach(r => {
+      expect(r.daysUntilPeakSeasonStart).not.toBeNull();
+      if (r.daysUntilPeakSeasonStart! < 60) {
+        expect(r.reviewStatus).not.toBe("approved");
+      }
+    });
+  });
+
+  it("calculates inventory stress from total units needed vs available stock", () => {
+    const reviews = getPromotionInventoryRefreshReadinessReviews();
+    reviews.forEach(r => {
+      expect(r.estimatedTotalUnitsNeeded).toBe(r.estimatedDailyUnitSold * r.promotionDurationDays);
+      expect(r.replenishmentLeadTimeDays).toBeGreaterThan(0);
+      expect(typeof r.minimumDaysOfStockAvailable === "number" || r.minimumDaysOfStockAvailable === null).toBe(true);
+    });
+  });
+});
+

@@ -270,6 +270,20 @@ export interface PromotionCadenceReview {
   reason: string;
 }
 
+export interface PromotionInventoryRefreshReadinessReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  promotionDurationDays: number;
+  daysUntilPeakSeasonStart: number | null; // null if not upcoming
+  estimatedDailyUnitSold: number; // across all applicable products
+  estimatedTotalUnitsNeeded: number; // promotion duration × daily demand
+  minimumDaysOfStockAvailable: number | null; // min across all products
+  replenishmentLeadTimeDays: number; // avg lead time for applicable products
+  refreshWindowRiskLevel: "healthy" | "tight" | "critical"; // can refill during promo?
+  reason: string;
+}
+
 export interface PromotionProfitabilitySnapshot {
   promotionId: string;
   name: string;

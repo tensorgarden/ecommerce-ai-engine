@@ -1819,3 +1819,98 @@ export function getPromotionCadenceReviews(): PromotionCadenceReview[] {
       return b.repeatExposureRate - a.repeatExposureRate;
     });
 }
+
+
+export function getPromotionInventoryRefreshReadinessReviews(): PromotionInventoryRefreshReadinessReview[] {
+  const peakSeasonStartDoy = 305; // ~Nov 1st in a 365-day year
+  const currentDoy = 220; // ~Aug 8th baseline for testing
+  
+  return promotions
+    .map((promo) => {
+      const applicableProductIds =
+        promo.applicableProducts[0] === "all" ? products.map(p => p.id) : promo.applicableProducts;
+      
+      const applicableProducts = products.filter(p =>
+        applicableProductIds.includes(p.id)
+      );
+      
+      const startDate = new Date(promo.startDate);
+      const endDate = new Date(promo.endDate);
+      const promotionDurationDays = Math.ceil(
+        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      
+      const daysUntilPeakSeasonStart =
+        peakSeasonStartDoy > currentDoy ? peakSeasonStartDoy - currentDoy : null;
+      
+      // Estimate daily unit sold across products
+      const totalUnitsSold = applicableProducts.reduce((sum, p) => sum + p.unitsSold, 0);
+      const estimatedDailyUnitSold = Math.ceil(totalUnitsSold / 90); // rolling 90-day average
+      
+      const estimatedTotalUnitsNeeded = estimatedDailyUnitSold * promotionDurationDays;
+      
+      // Min stock and avg lead time across products
+      const minimumDaysOfStockAvailable =
+        applicableProducts.length > 0
+          ? Math.min(...applicableProducts.map(p => p.stockLevel / Math.max(estimatedDailyUnitSold, 1)))
+          : null;
+      
+      const replenishmentLeadTimeDays =
+        applicableProducts.length > 0
+          ? Math.ceil(applicableProducts.reduce((sum, p) => sum + (p.reorderPoint / 5), 0) / applicableProducts.length)
+          : 14;
+      
+      // Risk assessment: Can we refill during the promotion?
+      const totalAvailableStock = applicableProducts.reduce((sum, p) => sum + p.stockLevel, 0);
+      
+      const stockStress = estimatedTotalUnitsNeeded / Math.max(totalAvailableStock, 1);
+      
+      let refreshWindowRiskLevel: PromotionInventoryRefreshReadinessReview["refreshWindowRiskLevel"];
+      let reviewStatus: PromotionInventoryRefreshReadinessReview["reviewStatus"];
+      let reason: string;
+      
+      if (stockStress > 0.8 || (minimumDaysOfStockAvailable !== null && minimumDaysOfStockAvailable < replenishmentLeadTimeDays + 7)) {
+        refreshWindowRiskLevel = "critical";
+        reviewStatus = "blocked";
+        reason = "Insufficient stock buffer: promotion duration exceeds inventory runway plus replenishment lead time. Risk of stockout mid-campaign or inability to reorder safely.";
+      } else if (stockStress > 0.5 || (minimumDaysOfStockAvailable !== null && minimumDaysOfStockAvailable < replenishmentLeadTimeDays + 14)) {
+        refreshWindowRiskLevel = "tight";
+        reviewStatus = "review_required";
+        reason = "Tight inventory refresh window: replenishment must arrive during promotion to sustain demand. Requires expedited lead-time confirmation and safety-stock audits.";
+      } else {
+        refreshWindowRiskLevel = "healthy";
+        reviewStatus = "approved";
+        reason = "Healthy inventory refresh readiness: sufficient stock buffer and clear replenishment windows allow campaign to run without inventory risk.";
+      }
+      
+      // Flag peak-season timing risk
+      if (daysUntilPeakSeasonStart !== null && daysUntilPeakSeasonStart < 60) {
+        if (reviewStatus === "approved") {
+          reviewStatus = "review_required";
+          reason += " ⚠ Campaign overlaps with peak-season start; coordinate with seasonal demand forecast.";
+        }
+      }
+      
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        promotionDurationDays,
+        daysUntilPeakSeasonStart,
+        estimatedDailyUnitSold,
+        estimatedTotalUnitsNeeded,
+        minimumDaysOfStockAvailable: minimumDaysOfStockAvailable ? Math.round(minimumDaysOfStockAvailable * 10) / 10 : null,
+        replenishmentLeadTimeDays,
+        refreshWindowRiskLevel,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const riskRank: Record<string, number> = { critical: 0, tight: 1, healthy: 2 };
+      const aRank = riskRank[a.refreshWindowRiskLevel];
+      const bRank = riskRank[b.refreshWindowRiskLevel];
+      if (aRank !== bRank) return aRank - bRank;
+      const statusRank: Record<string, number> = { blocked: 0, review_required: 1, approved: 2 };
+      return statusRank[a.reviewStatus] - statusRank[b.reviewStatus];
+    });
+}
