@@ -23,6 +23,7 @@ import {
   getPromotionDeliveryExceptionReviews,
   getPromotionCadenceReviews,
   getPromotionInventoryRefreshReadinessReviews,
+  getPromotionFreeShippingThresholdReviews,
   getPromotionStackingRisks,
 } from "@/lib/demo-data";
 
@@ -879,3 +880,63 @@ describe("PromotionInventoryRefreshReadinessReviews", () => {
   });
 });
 
+
+describe("PromotionFreeShippingThresholdReviews", () => {
+  it("returns one review per promotion with complete threshold signals", () => {
+    const reviews = getPromotionFreeShippingThresholdReviews();
+    expect(reviews).toHaveLength(promotions.length);
+    for (const promo of promotions) {
+      const signals = promo.freeShippingThresholdSignals;
+      expect(
+        signals.thresholdOrderValue === null ||
+          signals.thresholdOrderValue > 0,
+      ).toBe(true);
+      expect(signals.modalOrderValue).toBeGreaterThan(0);
+      expect(signals.qualifyingOrderRate).toBeGreaterThanOrEqual(0);
+      expect(signals.qualifyingOrderRate).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it("blocks sitewide free shipping that has no qualification threshold", () => {
+    const review = getPromotionFreeShippingThresholdReviews().find(
+      (item) => item.promotionId === "promo-free-ship",
+    );
+    expect(review?.reviewStatus).toBe("blocked");
+    expect(review?.thresholdOrderValue).toBeNull();
+    expect(review?.qualifyingOrderRate).toBeGreaterThanOrEqual(85);
+    expect(review?.reason).toContain("orders that would have shipped anyway");
+  });
+
+  it("review-gates thresholds below the modal basket or clearing most orders, approving lines above the basket", () => {
+    const reviews = getPromotionFreeShippingThresholdReviews();
+    const summer = reviews.find((item) => item.promotionId === "promo-summer-sale");
+    const bundle = reviews.find((item) => item.promotionId === "promo-bundle-deal");
+    const beauty = reviews.find((item) => item.promotionId === "promo-beauty-bogo");
+    const loyalty = reviews.find(
+      (item) => item.promotionId === "promo-loyalty-bonus",
+    );
+    expect(summer?.reviewStatus).toBe("review_required");
+    expect(summer?.thresholdOrderValue ?? Infinity).toBeLessThan(
+      summer?.modalOrderValue ?? 0,
+    );
+    expect(bundle?.reviewStatus).toBe("review_required");
+    expect(bundle?.qualifyingOrderRate).toBeGreaterThanOrEqual(70);
+    expect(beauty?.reviewStatus).toBe("approved");
+    expect(loyalty?.reviewStatus).toBe("approved");
+  });
+
+  it("sorts blocked reviews first and keeps approved coverage last", () => {
+    const reviews = getPromotionFreeShippingThresholdReviews();
+    expect(reviews[0].reviewStatus).toBe("blocked");
+    const rank: Record<string, number> = {
+      blocked: 0,
+      review_required: 1,
+      approved: 2,
+    };
+    for (let i = 1; i < reviews.length; i++) {
+      expect(rank[reviews[i - 1].reviewStatus]).toBeLessThanOrEqual(
+        rank[reviews[i].reviewStatus],
+      );
+    }
+  });
+});

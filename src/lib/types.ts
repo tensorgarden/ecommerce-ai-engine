@@ -109,6 +109,12 @@ export interface PromotionFulfillmentSignals {
   returnToSenderOrderRate: number; // % likely to incur outbound plus return shipping
 }
 
+export interface PromotionFreeShippingThresholdSignals {
+  thresholdOrderValue: number | null; // min basket to qualify for free shipping; null = no threshold (sitewide)
+  modalOrderValue: number; // most common basket size among influenced orders
+  qualifyingOrderRate: number; // % of influenced orders clearing the threshold
+}
+
 export interface PromotionAbuseSignals {
   linkedIdentityRedemptionRate: number; // % tied to a device/payment identity used by another account
   rapidSignupRedemptionRate: number; // % redeemed within 60 seconds of account creation
@@ -163,6 +169,7 @@ export interface Promotion {
   returnExposure: PromotionReturnExposure;
   demandShiftSignals: PromotionDemandShiftSignals;
   fulfillmentSignals: PromotionFulfillmentSignals;
+  freeShippingThresholdSignals: PromotionFreeShippingThresholdSignals;
   redemptionControl: PromotionRedemptionControl;
   abuseSignals: PromotionAbuseSignals;
   cadenceSignals: PromotionCadenceSignals;
@@ -239,6 +246,16 @@ export interface PromotionFulfillmentCostReview {
   requiredSubsidy: number;
   reservedSubsidy: number;
   subsidyCoverageRatio: number;
+  reason: string;
+}
+
+export interface PromotionFreeShippingThresholdReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  thresholdOrderValue: number | null;
+  modalOrderValue: number;
+  qualifyingOrderRate: number;
   reason: string;
 }
 

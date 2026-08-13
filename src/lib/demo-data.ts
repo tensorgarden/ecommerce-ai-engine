@@ -10,8 +10,10 @@ import type {
   PromotionAbuseReview,
   PromotionReturnRiskReview,
   PromotionInventoryReadinessReview,
+  PromotionInventoryRefreshReadinessReview,
   PromotionDemandPullForwardReview,
   PromotionFulfillmentCostReview,
+  PromotionFreeShippingThresholdReview,
   PromotionShippingOutlierReview,
   PromotionDeliveryExceptionReview,
   PromotionCadenceReview,
@@ -715,6 +717,11 @@ export const promotions: Promotion[] = [
       addressCorrectionOrderRate: 1,
       returnToSenderOrderRate: 0.3,
     },
+    freeShippingThresholdSignals: {
+      thresholdOrderValue: 50,
+      modalOrderValue: 68,
+      qualifyingOrderRate: 62,
+    },
     redemptionControl: {
       codeStrategy: "segment_locked",
       distributionChannels: ["email", "onsite_banner"],
@@ -774,6 +781,11 @@ export const promotions: Promotion[] = [
       dimensionalWeightOrderRate: 24,
       addressCorrectionOrderRate: 7,
       returnToSenderOrderRate: 2.5,
+    },
+    freeShippingThresholdSignals: {
+      thresholdOrderValue: null,
+      modalOrderValue: 64,
+      qualifyingOrderRate: 100,
     },
     redemptionControl: {
       codeStrategy: "public_code",
@@ -835,6 +847,11 @@ export const promotions: Promotion[] = [
       addressCorrectionOrderRate: 4,
       returnToSenderOrderRate: 1,
     },
+    freeShippingThresholdSignals: {
+      thresholdOrderValue: 60,
+      modalOrderValue: 72,
+      qualifyingOrderRate: 71,
+    },
     redemptionControl: {
       codeStrategy: "single_use",
       distributionChannels: ["email", "sms"],
@@ -895,6 +912,11 @@ export const promotions: Promotion[] = [
       addressCorrectionOrderRate: 3,
       returnToSenderOrderRate: 0.8,
     },
+    freeShippingThresholdSignals: {
+      thresholdOrderValue: 75,
+      modalOrderValue: 62,
+      qualifyingOrderRate: 48,
+    },
     redemptionControl: {
       codeStrategy: "segment_locked",
       distributionChannels: ["email", "affiliate_network"],
@@ -954,6 +976,11 @@ export const promotions: Promotion[] = [
       dimensionalWeightOrderRate: 9,
       addressCorrectionOrderRate: 2,
       returnToSenderOrderRate: 0.5,
+    },
+    freeShippingThresholdSignals: {
+      thresholdOrderValue: 90,
+      modalOrderValue: 85,
+      qualifyingOrderRate: 45,
     },
     redemptionControl: {
       codeStrategy: "segment_locked",
@@ -1912,5 +1939,61 @@ export function getPromotionInventoryRefreshReadinessReviews(): PromotionInvento
       if (aRank !== bRank) return aRank - bRank;
       const statusRank: Record<string, number> = { blocked: 0, review_required: 1, approved: 2 };
       return statusRank[a.reviewStatus] - statusRank[b.reviewStatus];
+    });
+}
+const freeShippingThresholdReviewRank: Record<
+  PromotionFreeShippingThresholdReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Free-shipping line economics gate for promotions. A threshold that sits
+ * below the modal basket, or that disappears entirely on sitewide offers,
+ * absorbs carrier cost on orders that would have shipped anyway, so the
+ * offer's conversion lift must be credited against the subsidy it actually
+ * funds.
+ */
+export function getPromotionFreeShippingThresholdReviews(): PromotionFreeShippingThresholdReview[] {
+  return promotions
+    .map((promo) => {
+      const { thresholdOrderValue, modalOrderValue, qualifyingOrderRate } =
+        promo.freeShippingThresholdSignals;
+      const sitewideFreeShipping =
+        promo.type === "free_shipping" && thresholdOrderValue === null;
+      const thresholdBelowModalBasket =
+        thresholdOrderValue !== null && thresholdOrderValue < modalOrderValue;
+      const broadQualification = qualifyingOrderRate >= 70;
+      const reviewStatus: PromotionFreeShippingThresholdReview["reviewStatus"] =
+        sitewideFreeShipping || qualifyingOrderRate >= 85
+          ? "blocked"
+          : thresholdBelowModalBasket || broadQualification
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Sitewide free shipping removes the qualification line entirely, so the shipping subsidy lands on orders that would have shipped anyway; add a threshold or zone exclusions before launch."
+          : reviewStatus === "review_required"
+            ? "The free-shipping line clears too much of the basket distribution to recruit incremental spend; re-derive the threshold from modal order value and carrier cost."
+            : "The free-shipping threshold sits above the modal basket and qualifying orders stay a minority, so the subsidy targets conversion instead of being given away.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        thresholdOrderValue,
+        modalOrderValue,
+        qualifyingOrderRate,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        freeShippingThresholdReviewRank[a.reviewStatus] -
+        freeShippingThresholdReviewRank[b.reviewStatus];
+      return rank === 0 ? b.qualifyingOrderRate - a.qualifyingOrderRate : rank;
     });
 }
