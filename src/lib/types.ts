@@ -121,6 +121,12 @@ export interface PromotionAbuseSignals {
   verifiedIdentityCoverage: number; // % backed by verified phone, payment, or address identity
 }
 
+export interface PromotionCrackResistanceSignals {
+  failedRedemptionAttemptRate: number; // % of checkout code entries failing validation (enumeration probing)
+  enumerationVelocityPerHour: number; // invalid-code attempts per hour tied to one device or session
+  resellerBulkOrderRate: number; // % of discounted orders with quantities consistent with resale
+}
+
 export interface PromotionCadenceSignals {
   daysDiscountedLast90: number; // days in the trailing 90 this scope sat at a promoted price
   averageGapDaysBetweenOffers: number; // average full-price recovery gap between consecutive offers
@@ -172,6 +178,7 @@ export interface Promotion {
   freeShippingThresholdSignals: PromotionFreeShippingThresholdSignals;
   redemptionControl: PromotionRedemptionControl;
   abuseSignals: PromotionAbuseSignals;
+  crackResistanceSignals: PromotionCrackResistanceSignals;
   cadenceSignals: PromotionCadenceSignals;
   audienceIntent: PromotionAudienceIntent;
   targetSegments: string[]; // customer segment IDs or "all"
@@ -203,6 +210,16 @@ export interface PromotionAbuseReview {
   linkedIdentityRedemptionRate: number;
   rapidSignupRedemptionRate: number;
   verifiedIdentityCoverage: number;
+  reason: string;
+}
+
+export interface PromotionCrackResistanceReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  failedRedemptionAttemptRate: number;
+  enumerationVelocityPerHour: number;
+  resellerBulkOrderRate: number;
   reason: string;
 }
 

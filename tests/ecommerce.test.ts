@@ -15,6 +15,7 @@ import {
   getPromotionAudienceFitReviews,
   getPromotionLeakageReviews,
   getPromotionAbuseReviews,
+  getPromotionCrackResistanceReviews,
   getPromotionReturnRiskReviews,
   getPromotionInventoryReadinessReviews,
   getPromotionDemandPullForwardReviews,
@@ -938,5 +939,38 @@ describe("PromotionFreeShippingThresholdReviews", () => {
         rank[reviews[i].reviewStatus],
       );
     }
+  });
+});
+// ---------------------------------------------------------------------------
+// 25. Promotion code-cracking resistance guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionCrackResistanceReviews", () => {
+  it("returns one crack-resistance review per promotion", () => {
+    const reviews = getPromotionCrackResistanceReviews();
+    expect(reviews).toHaveLength(promotions.length);
+  });
+
+  it("blocks enumeration attacks that combine high velocity with public guessable codes", () => {
+    const review = getPromotionCrackResistanceReviews().find(
+      (item) => item.promotionId === "promo-free-ship",
+    );
+
+    expect(review?.reviewStatus).toBe("blocked");
+    expect(review?.enumerationVelocityPerHour).toBeGreaterThanOrEqual(200);
+    expect(review?.failedRedemptionAttemptRate).toBeGreaterThanOrEqual(25);
+    expect(review?.reason).toContain("rate-limited");
+  });
+
+  it("review-gates moderate crack signals and approves single-use low-velocity campaigns", () => {
+    const beauty = getPromotionCrackResistanceReviews().find(
+      (item) => item.promotionId === "promo-beauty-bogo",
+    );
+    const bundle = getPromotionCrackResistanceReviews().find(
+      (item) => item.promotionId === "promo-bundle-deal",
+    );
+
+    expect(beauty?.reviewStatus).toBe("review_required");
+    expect(bundle?.reviewStatus).toBe("approved");
+    expect(bundle?.enumerationVelocityPerHour).toBeLessThan(60);
   });
 });

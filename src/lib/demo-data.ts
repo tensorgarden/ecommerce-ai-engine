@@ -8,6 +8,7 @@ import type {
   PromotionAudienceFitReview,
   PromotionLeakageReview,
   PromotionAbuseReview,
+  PromotionCrackResistanceReview,
   PromotionReturnRiskReview,
   PromotionInventoryReadinessReview,
   PromotionInventoryRefreshReadinessReview,
@@ -733,6 +734,11 @@ export const promotions: Promotion[] = [
       rapidSignupRedemptionRate: 8,
       verifiedIdentityCoverage: 93,
     },
+    crackResistanceSignals: {
+      failedRedemptionAttemptRate: 11,
+      enumerationVelocityPerHour: 72,
+      resellerBulkOrderRate: 4,
+    },
     cadenceSignals: {
       daysDiscountedLast90: 18,
       averageGapDaysBetweenOffers: 21,
@@ -797,6 +803,11 @@ export const promotions: Promotion[] = [
       linkedIdentityRedemptionRate: 27,
       rapidSignupRedemptionRate: 34,
       verifiedIdentityCoverage: 48,
+    },
+    crackResistanceSignals: {
+      failedRedemptionAttemptRate: 28,
+      enumerationVelocityPerHour: 260,
+      resellerBulkOrderRate: 12,
     },
     cadenceSignals: {
       daysDiscountedLast90: 34,
@@ -863,6 +874,11 @@ export const promotions: Promotion[] = [
       rapidSignupRedemptionRate: 5,
       verifiedIdentityCoverage: 96,
     },
+    crackResistanceSignals: {
+      failedRedemptionAttemptRate: 3,
+      enumerationVelocityPerHour: 18,
+      resellerBulkOrderRate: 2,
+    },
     cadenceSignals: {
       daysDiscountedLast90: 12,
       averageGapDaysBetweenOffers: 28,
@@ -928,6 +944,11 @@ export const promotions: Promotion[] = [
       rapidSignupRedemptionRate: 19,
       verifiedIdentityCoverage: 78,
     },
+    crackResistanceSignals: {
+      failedRedemptionAttemptRate: 16,
+      enumerationVelocityPerHour: 95,
+      resellerBulkOrderRate: 6,
+    },
     cadenceSignals: {
       daysDiscountedLast90: 36,
       averageGapDaysBetweenOffers: 9,
@@ -992,6 +1013,11 @@ export const promotions: Promotion[] = [
       linkedIdentityRedemptionRate: 9,
       rapidSignupRedemptionRate: 12,
       verifiedIdentityCoverage: 88,
+    },
+    crackResistanceSignals: {
+      failedRedemptionAttemptRate: 9,
+      enumerationVelocityPerHour: 41,
+      resellerBulkOrderRate: 9,
     },
     cadenceSignals: {
       daysDiscountedLast90: 85,
@@ -1340,6 +1366,67 @@ export function getPromotionAbuseReviews(): PromotionAbuseReview[] {
       const rank = abuseReviewRank[a.reviewStatus] - abuseReviewRank[b.reviewStatus];
       return rank === 0
         ? b.linkedIdentityRedemptionRate - a.linkedIdentityRedemptionRate
+        : rank;
+    });
+}
+
+const crackResistanceReviewRank: Record<
+  PromotionCrackResistanceReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Code-cracking guardrail for promotions. Failed-validation probing, high
+ * enumeration velocity, and reseller-scale bulk buying are evaluated together
+ * so a single failed attempt never labels a real customer as an attacker.
+ */
+export function getPromotionCrackResistanceReviews(): PromotionCrackResistanceReview[] {
+  return promotions
+    .map((promo) => {
+      const {
+        failedRedemptionAttemptRate,
+        enumerationVelocityPerHour,
+        resellerBulkOrderRate,
+      } = promo.crackResistanceSignals;
+      const guessableStrategy =
+        promo.redemptionControl.codeStrategy === "public_code";
+      const highEnumeration = enumerationVelocityPerHour >= 200;
+      const heavyProbing = failedRedemptionAttemptRate >= 25;
+      const reviewStatus: PromotionCrackResistanceReview["reviewStatus"] =
+        highEnumeration && (guessableStrategy || heavyProbing)
+          ? "blocked"
+          : enumerationVelocityPerHour >= 60 ||
+              failedRedemptionAttemptRate >= 15 ||
+              resellerBulkOrderRate >= 8
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Enumeration velocity and failed-redemption probing exceed the release gate; require single-use codes and rate-limited validation before granting promotional value."
+          : reviewStatus === "review_required"
+            ? "Code-cracking or reseller-bulk signals need a fraud review before the promotion scales."
+            : "Validation failures and enumeration velocity are low under single-use redemption controls.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        failedRedemptionAttemptRate,
+        enumerationVelocityPerHour,
+        resellerBulkOrderRate,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        crackResistanceReviewRank[a.reviewStatus] -
+        crackResistanceReviewRank[b.reviewStatus];
+      return rank === 0
+        ? b.enumerationVelocityPerHour - a.enumerationVelocityPerHour
         : rank;
     });
 }
