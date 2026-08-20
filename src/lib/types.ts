@@ -93,6 +93,12 @@ export interface PromotionReturnExposure {
   reverseLogisticsCostPerReturn: number;
 }
 
+export interface PromotionReturnAbuseSignals {
+  bracketingOrderRate: number; // % of influenced orders with multiple variants likely to be returned
+  serialReturnCustomerRate: number; // % of customers with repeated policy returns
+  policyExceptionRate: number; // % of returns requiring a manual policy override
+}
+
 export interface PromotionDemandShiftSignals {
   stockpilingRate: number; // % of influenced orders estimated as forward buying
   projectedPostPromotionDip: number; // % below baseline after the offer ends
@@ -173,6 +179,7 @@ export interface Promotion {
   incrementalRevenue: number; // revenue after subtracting cannibalized baseline
   costExposure: PromotionCostExposure;
   returnExposure: PromotionReturnExposure;
+  returnAbuseSignals: PromotionReturnAbuseSignals;
   demandShiftSignals: PromotionDemandShiftSignals;
   fulfillmentSignals: PromotionFulfillmentSignals;
   freeShippingThresholdSignals: PromotionFreeShippingThresholdSignals;
@@ -230,6 +237,16 @@ export interface PromotionReturnRiskReview {
   expectedReturnRate: number;
   estimatedReverseLogisticsCost: number;
   reserveCoverageRatio: number;
+  reason: string;
+}
+
+export interface PromotionReturnAbuseReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  bracketingOrderRate: number;
+  serialReturnCustomerRate: number;
+  policyExceptionRate: number;
   reason: string;
 }
 

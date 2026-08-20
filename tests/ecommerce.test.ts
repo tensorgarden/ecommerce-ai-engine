@@ -17,6 +17,7 @@ import {
   getPromotionAbuseReviews,
   getPromotionCrackResistanceReviews,
   getPromotionReturnRiskReviews,
+  getPromotionReturnAbuseReviews,
   getPromotionInventoryReadinessReviews,
   getPromotionDemandPullForwardReviews,
   getPromotionFulfillmentCostReviews,
@@ -972,5 +973,55 @@ describe("PromotionCrackResistanceReviews", () => {
     expect(beauty?.reviewStatus).toBe("review_required");
     expect(bundle?.reviewStatus).toBe("approved");
     expect(bundle?.enumerationVelocityPerHour).toBeLessThan(60);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// 26. Promotion return-policy abuse guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionReturnAbuseReviews", () => {
+  it("returns one return-abuse review per promotion with bounded signals", () => {
+    const reviews = getPromotionReturnAbuseReviews();
+    expect(reviews).toHaveLength(promotions.length);
+
+    for (const review of reviews) {
+      expect(review.bracketingOrderRate).toBeGreaterThanOrEqual(0);
+      expect(review.bracketingOrderRate).toBeLessThanOrEqual(100);
+      expect(review.serialReturnCustomerRate).toBeGreaterThanOrEqual(0);
+      expect(review.serialReturnCustomerRate).toBeLessThanOrEqual(100);
+      expect(review.policyExceptionRate).toBeGreaterThanOrEqual(0);
+      expect(review.policyExceptionRate).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it("blocks elevated bracketing only when repeated returns or policy exceptions reinforce it", () => {
+    const reviews = getPromotionReturnAbuseReviews();
+    const blockedIds = reviews
+      .filter((review) => review.reviewStatus === "blocked")
+      .map((review) => review.promotionId);
+    const beauty = reviews.find(
+      (review) => review.promotionId === "promo-beauty-bogo",
+    );
+
+    expect(blockedIds).toEqual(
+      expect.arrayContaining(["promo-free-ship", "promo-loyalty-bonus"]),
+    );
+    expect(beauty?.bracketingOrderRate).toBeGreaterThanOrEqual(15);
+    expect(beauty?.reviewStatus).toBe("review_required");
+    expect(beauty?.reason).toContain("Bracketing alone is not treated as fraud");
+  });
+
+  it("approves targeted offers with low return-policy exception signals", () => {
+    const reviews = getPromotionReturnAbuseReviews();
+    const summer = reviews.find(
+      (review) => review.promotionId === "promo-summer-sale",
+    );
+    const bundle = reviews.find(
+      (review) => review.promotionId === "promo-bundle-deal",
+    );
+
+    expect(summer?.reviewStatus).toBe("approved");
+    expect(bundle?.reviewStatus).toBe("approved");
   });
 });

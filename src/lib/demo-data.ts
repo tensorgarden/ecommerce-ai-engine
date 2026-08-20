@@ -10,6 +10,7 @@ import type {
   PromotionAbuseReview,
   PromotionCrackResistanceReview,
   PromotionReturnRiskReview,
+  PromotionReturnAbuseReview,
   PromotionInventoryReadinessReview,
   PromotionInventoryRefreshReadinessReview,
   PromotionDemandPullForwardReview,
@@ -704,6 +705,11 @@ export const promotions: Promotion[] = [
       expectedReturnRate: 12,
       reverseLogisticsCostPerReturn: 14,
     },
+    returnAbuseSignals: {
+      bracketingOrderRate: 5,
+      serialReturnCustomerRate: 3,
+      policyExceptionRate: 2,
+    },
     demandShiftSignals: {
       stockpilingRate: 14,
       projectedPostPromotionDip: 8,
@@ -773,6 +779,11 @@ export const promotions: Promotion[] = [
     returnExposure: {
       expectedReturnRate: 22,
       reverseLogisticsCostPerReturn: 13,
+    },
+    returnAbuseSignals: {
+      bracketingOrderRate: 22,
+      serialReturnCustomerRate: 14,
+      policyExceptionRate: 9,
     },
     demandShiftSignals: {
       stockpilingRate: 38,
@@ -844,6 +855,11 @@ export const promotions: Promotion[] = [
       expectedReturnRate: 8,
       reverseLogisticsCostPerReturn: 12,
     },
+    returnAbuseSignals: {
+      bracketingOrderRate: 7,
+      serialReturnCustomerRate: 3,
+      policyExceptionRate: 2,
+    },
     demandShiftSignals: {
       stockpilingRate: 9,
       projectedPostPromotionDip: 5,
@@ -914,6 +930,11 @@ export const promotions: Promotion[] = [
       expectedReturnRate: 16,
       reverseLogisticsCostPerReturn: 10,
     },
+    returnAbuseSignals: {
+      bracketingOrderRate: 19,
+      serialReturnCustomerRate: 8,
+      policyExceptionRate: 6,
+    },
     demandShiftSignals: {
       stockpilingRate: 24,
       projectedPostPromotionDip: 16,
@@ -983,6 +1004,11 @@ export const promotions: Promotion[] = [
     returnExposure: {
       expectedReturnRate: 19,
       reverseLogisticsCostPerReturn: 14,
+    },
+    returnAbuseSignals: {
+      bracketingOrderRate: 18,
+      serialReturnCustomerRate: 12,
+      policyExceptionRate: 10,
     },
     demandShiftSignals: {
       stockpilingRate: 42,
@@ -1552,6 +1578,68 @@ export function getPromotionReturnRiskReviews(): PromotionReturnRiskReview[] {
       const rank = returnRiskRank[a.reviewStatus] - returnRiskRank[b.reviewStatus];
       return rank === 0
         ? b.expectedReturnRate - a.expectedReturnRate
+        : rank;
+    });
+}
+
+
+const returnAbuseReviewRank: Record<
+  PromotionReturnAbuseReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Return-policy abuse preflight for promotions. Bracketing can be a normal
+ * ecommerce behavior, so it is never blocked on its own; the release gate
+ * requires it to combine with repeated returns or policy exceptions.
+ */
+export function getPromotionReturnAbuseReviews(): PromotionReturnAbuseReview[] {
+  return promotions
+    .map((promo) => {
+      const {
+        bracketingOrderRate,
+        serialReturnCustomerRate,
+        policyExceptionRate,
+      } = promo.returnAbuseSignals;
+      const highBracketing = bracketingOrderRate >= 15;
+      const repeatedReturns = serialReturnCustomerRate >= 10;
+      const policyExceptionPattern = policyExceptionRate >= 8;
+      const reviewStatus: PromotionReturnAbuseReview["reviewStatus"] =
+        highBracketing && (repeatedReturns || policyExceptionPattern)
+          ? "blocked"
+          : bracketingOrderRate >= 10 ||
+              serialReturnCustomerRate >= 6 ||
+              policyExceptionRate >= 5
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Bracketing is paired with repeated returns or policy exceptions; hold refund automation for item-level verification before scaling the promotion."
+          : reviewStatus === "review_required"
+            ? "Return behavior is elevated; validate item-level evidence and policy exceptions before expanding the promotion. Bracketing alone is not treated as fraud."
+            : "Return behavior stays below review thresholds; bracketing alone is not treated as fraud.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        bracketingOrderRate,
+        serialReturnCustomerRate,
+        policyExceptionRate,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        returnAbuseReviewRank[a.reviewStatus] -
+        returnAbuseReviewRank[b.reviewStatus];
+      return rank === 0
+        ? b.policyExceptionRate + b.serialReturnCustomerRate -
+            (a.policyExceptionRate + a.serialReturnCustomerRate)
         : rank;
     });
 }
