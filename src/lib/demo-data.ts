@@ -15,6 +15,7 @@ import type {
   PromotionInventoryRefreshReadinessReview,
   PromotionDemandPullForwardReview,
   PromotionFulfillmentCostReview,
+  PromotionShippingReconciliationReview,
   PromotionFreeShippingThresholdReview,
   PromotionShippingOutlierReview,
   PromotionDeliveryExceptionReview,
@@ -750,6 +751,11 @@ export const promotions: Promotion[] = [
       averageGapDaysBetweenOffers: 21,
       repeatExposureRate: 22,
     },
+    shippingReconciliationSignals: {
+      carrierInvoiceLagDays: 7,
+      retroactiveAdjustmentRate: 3,
+      unreconciledShippingCostRate: 2,
+    },
   },
   {
     id: "promo-free-ship",
@@ -824,6 +830,11 @@ export const promotions: Promotion[] = [
       daysDiscountedLast90: 34,
       averageGapDaysBetweenOffers: 6,
       repeatExposureRate: 55,
+    },
+    shippingReconciliationSignals: {
+      carrierInvoiceLagDays: 28,
+      retroactiveAdjustmentRate: 18,
+      unreconciledShippingCostRate: 24,
     },
   },
   {
@@ -900,6 +911,11 @@ export const promotions: Promotion[] = [
       averageGapDaysBetweenOffers: 28,
       repeatExposureRate: 15,
     },
+    shippingReconciliationSignals: {
+      carrierInvoiceLagDays: 14,
+      retroactiveAdjustmentRate: 7,
+      unreconciledShippingCostRate: 8,
+    },
   },
   {
     id: "promo-beauty-bogo",
@@ -975,6 +991,11 @@ export const promotions: Promotion[] = [
       averageGapDaysBetweenOffers: 9,
       repeatExposureRate: 47,
     },
+    shippingReconciliationSignals: {
+      carrierInvoiceLagDays: 21,
+      retroactiveAdjustmentRate: 11,
+      unreconciledShippingCostRate: 12,
+    },
   },
   {
     id: "promo-loyalty-bonus",
@@ -1049,6 +1070,11 @@ export const promotions: Promotion[] = [
       daysDiscountedLast90: 85,
       averageGapDaysBetweenOffers: 2,
       repeatExposureRate: 71,
+    },
+    shippingReconciliationSignals: {
+      carrierInvoiceLagDays: 28,
+      retroactiveAdjustmentRate: 15,
+      unreconciledShippingCostRate: 18,
     },
   },
 ];
@@ -2170,5 +2196,64 @@ export function getPromotionFreeShippingThresholdReviews(): PromotionFreeShippin
         freeShippingThresholdReviewRank[a.reviewStatus] -
         freeShippingThresholdReviewRank[b.reviewStatus];
       return rank === 0 ? b.qualifyingOrderRate - a.qualifyingOrderRate : rank;
+    });
+}
+const shippingReconciliationReviewRank: Record<
+  PromotionShippingReconciliationReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Late-cost reconciliation preflight for promotion economics. Carrier and 3PL
+ * invoices can revise shipping costs after the sale, so provisional margin
+ * should not be treated as final when adjustment exposure is material.
+ */
+export function getPromotionShippingReconciliationReviews(): PromotionShippingReconciliationReview[] {
+  return promotions
+    .map((promo) => {
+      const {
+        carrierInvoiceLagDays,
+        retroactiveAdjustmentRate,
+        unreconciledShippingCostRate,
+      } = promo.shippingReconciliationSignals;
+      const delayedInvoice = carrierInvoiceLagDays >= 21;
+      const materialAdjustmentExposure =
+        retroactiveAdjustmentRate >= 15 || unreconciledShippingCostRate >= 20;
+      const reviewStatus: PromotionShippingReconciliationReview["reviewStatus"] =
+        delayedInvoice && materialAdjustmentExposure
+          ? "blocked"
+          : carrierInvoiceLagDays >= 14 ||
+              retroactiveAdjustmentRate >= 8 ||
+              unreconciledShippingCostRate >= 8
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Delayed carrier-cost updates and material adjustments can restate promotion margin; reconcile invoice costs at order level before scaling."
+          : reviewStatus === "review_required"
+            ? "Carrier or 3PL costs may arrive after the sale; keep provisional promotion margin in review until the reconciliation window closes."
+            : "Carrier-cost timing and adjustment exposure stay low enough for routine reconciliation.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        carrierInvoiceLagDays,
+        retroactiveAdjustmentRate,
+        unreconciledShippingCostRate,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        shippingReconciliationReviewRank[a.reviewStatus] -
+        shippingReconciliationReviewRank[b.reviewStatus];
+      return rank === 0
+        ? b.unreconciledShippingCostRate - a.unreconciledShippingCostRate
+        : rank;
     });
 }

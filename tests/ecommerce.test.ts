@@ -21,6 +21,7 @@ import {
   getPromotionInventoryReadinessReviews,
   getPromotionDemandPullForwardReviews,
   getPromotionFulfillmentCostReviews,
+  getPromotionShippingReconciliationReviews,
   getPromotionShippingOutlierReviews,
   getPromotionDeliveryExceptionReviews,
   getPromotionCadenceReviews,
@@ -1023,5 +1024,50 @@ describe("PromotionReturnAbuseReviews", () => {
 
     expect(summer?.reviewStatus).toBe("approved");
     expect(bundle?.reviewStatus).toBe("approved");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 27. Promotion shipping-cost reconciliation guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionShippingReconciliationReviews", () => {
+  it("returns one reconciliation review per promotion with bounded signals", () => {
+    const reviews = getPromotionShippingReconciliationReviews();
+    expect(reviews).toHaveLength(promotions.length);
+
+    for (const promo of promotions) {
+      const signals = promo.shippingReconciliationSignals;
+      expect(signals.carrierInvoiceLagDays).toBeGreaterThanOrEqual(0);
+      expect(signals.retroactiveAdjustmentRate).toBeGreaterThanOrEqual(0);
+      expect(signals.retroactiveAdjustmentRate).toBeLessThanOrEqual(100);
+      expect(signals.unreconciledShippingCostRate).toBeGreaterThanOrEqual(0);
+      expect(signals.unreconciledShippingCostRate).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it("blocks free shipping when delayed carrier adjustments can restate margin", () => {
+    const review = getPromotionShippingReconciliationReviews().find(
+      (item) => item.promotionId === "promo-free-ship",
+    );
+
+    expect(review?.reviewStatus).toBe("blocked");
+    expect(review?.carrierInvoiceLagDays).toBeGreaterThanOrEqual(21);
+    expect(review?.retroactiveAdjustmentRate).toBeGreaterThanOrEqual(15);
+    expect(review?.unreconciledShippingCostRate).toBeGreaterThanOrEqual(20);
+    expect(review?.reason).toContain("reconcile invoice costs");
+  });
+
+  it("review-gates moderate timing exposure while approving a stable promotion", () => {
+    const reviews = getPromotionShippingReconciliationReviews();
+    const bundle = reviews.find(
+      (item) => item.promotionId === "promo-bundle-deal",
+    );
+    const summer = reviews.find(
+      (item) => item.promotionId === "promo-summer-sale",
+    );
+
+    expect(bundle?.reviewStatus).toBe("review_required");
+    expect(summer?.reviewStatus).toBe("approved");
+    expect(summer?.carrierInvoiceLagDays).toBeLessThan(14);
   });
 });

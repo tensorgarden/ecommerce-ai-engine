@@ -115,6 +115,12 @@ export interface PromotionFulfillmentSignals {
   returnToSenderOrderRate: number; // % likely to incur outbound plus return shipping
 }
 
+export interface PromotionShippingReconciliationSignals {
+  carrierInvoiceLagDays: number; // days until final carrier or 3PL costs are available
+  retroactiveAdjustmentRate: number; // % of influenced orders with post-sale cost changes
+  unreconciledShippingCostRate: number; // % of expected shipping cost not yet matched to invoices
+}
+
 export interface PromotionFreeShippingThresholdSignals {
   thresholdOrderValue: number | null; // min basket to qualify for free shipping; null = no threshold (sitewide)
   modalOrderValue: number; // most common basket size among influenced orders
@@ -182,6 +188,7 @@ export interface Promotion {
   returnAbuseSignals: PromotionReturnAbuseSignals;
   demandShiftSignals: PromotionDemandShiftSignals;
   fulfillmentSignals: PromotionFulfillmentSignals;
+  shippingReconciliationSignals: PromotionShippingReconciliationSignals;
   freeShippingThresholdSignals: PromotionFreeShippingThresholdSignals;
   redemptionControl: PromotionRedemptionControl;
   abuseSignals: PromotionAbuseSignals;
@@ -280,6 +287,16 @@ export interface PromotionFulfillmentCostReview {
   requiredSubsidy: number;
   reservedSubsidy: number;
   subsidyCoverageRatio: number;
+  reason: string;
+}
+
+export interface PromotionShippingReconciliationReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  carrierInvoiceLagDays: number;
+  retroactiveAdjustmentRate: number;
+  unreconciledShippingCostRate: number;
   reason: string;
 }
 
