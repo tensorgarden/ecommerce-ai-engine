@@ -716,6 +716,58 @@ describe("PromotionFulfillmentCostReviews", () => {
       bundle?.reservedSubsidy ?? 0,
     );
   });
+
+  it("allocates split shipments and customer contributions before calculating subsidy coverage", () => {
+    const reviews = getPromotionFulfillmentCostReviews();
+    const promo = promotions.find((item) => item.id === "promo-free-ship");
+    const review = reviews.find((item) => item.promotionId === promo?.id);
+    if (!promo || !review) throw new Error("Missing free-shipping review");
+
+    const expectedShipmentCount =
+      promo.ordersInfluenced *
+      (1 + promo.fulfillmentSignals.splitShipmentRate / 100);
+    const expectedFulfillmentCost =
+      expectedShipmentCount * promo.fulfillmentSignals.averageCostPerShipment;
+    const expectedCustomerContribution =
+      promo.ordersInfluenced *
+      promo.fulfillmentSignals.averageCustomerShippingContribution;
+
+    expect(review.projectedShipmentCount).toBe(expectedShipmentCount);
+    expect(review.projectedFulfillmentCost).toBeCloseTo(
+      expectedFulfillmentCost,
+      2,
+    );
+    expect(review.projectedCustomerContribution).toBe(
+      expectedCustomerContribution,
+    );
+    expect(review.requiredSubsidy).toBeCloseTo(
+      expectedFulfillmentCost - expectedCustomerContribution,
+      2,
+    );
+  });
+
+  it("surfaces the least-covered fulfillment reviews within each status first", () => {
+    const reviews = getPromotionFulfillmentCostReviews();
+    const rank: Record<string, number> = {
+      blocked: 0,
+      review_required: 1,
+      approved: 2,
+    };
+
+    for (let i = 1; i < reviews.length; i++) {
+      const previous = reviews[i - 1];
+      const current = reviews[i];
+      const previousRank = rank[previous.reviewStatus];
+      const currentRank = rank[current.reviewStatus];
+
+      expect(previousRank).toBeLessThanOrEqual(currentRank);
+      if (previousRank === currentRank) {
+        expect(previous.subsidyCoverageRatio).toBeLessThanOrEqual(
+          current.subsidyCoverageRatio,
+        );
+      }
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
