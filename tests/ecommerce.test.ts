@@ -25,6 +25,7 @@ import {
   getPromotionShippingOutlierReviews,
   getPromotionDeliveryExceptionReviews,
   getPromotionCadenceReviews,
+  getPromotionCartRetargetingReviews,
   getPromotionInventoryRefreshReadinessReviews,
   getPromotionFreeShippingThresholdReviews,
   getPromotionStackingRisks,
@@ -1121,5 +1122,73 @@ describe("PromotionShippingReconciliationReviews", () => {
     expect(bundle?.reviewStatus).toBe("review_required");
     expect(summer?.reviewStatus).toBe("approved");
     expect(summer?.carrierInvoiceLagDays).toBeLessThan(14);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// 28. Promotion cart-retargeting incrementality guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionCartRetargetingReviews", () => {
+  it("returns one cart-retargeting review per promotion with bounded signals", () => {
+    const reviews = getPromotionCartRetargetingReviews();
+    expect(reviews).toHaveLength(promotions.length);
+
+    for (const promo of promotions) {
+      const signals = promo.cartRetargetingSignals;
+      expect(signals.cartAbandonmentRate).toBeGreaterThanOrEqual(0);
+      expect(signals.cartAbandonmentRate).toBeLessThanOrEqual(100);
+      expect(signals.retargetingCoverageRate).toBeGreaterThanOrEqual(0);
+      expect(signals.retargetingCoverageRate).toBeLessThanOrEqual(100);
+      expect(signals.naturalRecoveryRate).toBeGreaterThanOrEqual(0);
+      expect(signals.naturalRecoveryRate).toBeLessThanOrEqual(100);
+      expect(signals.couponRecoveryRate).toBeGreaterThanOrEqual(0);
+      expect(signals.couponRecoveryRate).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it("blocks broad retargeting when most recovered carts may have converted without a coupon", () => {
+    const review = getPromotionCartRetargetingReviews().find(
+      (item) => item.promotionId === "promo-free-ship",
+    );
+
+    expect(review?.reviewStatus).toBe("blocked");
+    expect(review?.retargetingCoverageRate).toBeGreaterThanOrEqual(70);
+    expect(review?.naturalRecoveryRate).toBeGreaterThanOrEqual(25);
+    expect(review?.incrementalRecoveryRate).toBeLessThan(8);
+    expect(review?.estimatedDiscountGiveawayRate).toBeGreaterThan(20);
+    expect(review?.reason).toContain("holdout");
+  });
+
+  it("review-gates moderate exposure while approving targeted recovery with clear lift", () => {
+    const reviews = getPromotionCartRetargetingReviews();
+    const beauty = reviews.find(
+      (item) => item.promotionId === "promo-beauty-bogo",
+    );
+    const summer = reviews.find(
+      (item) => item.promotionId === "promo-summer-sale",
+    );
+
+    expect(beauty?.reviewStatus).toBe("review_required");
+    expect(beauty?.naturalRecoveryRate).toBeGreaterThanOrEqual(15);
+    expect(summer?.reviewStatus).toBe("approved");
+    expect(summer?.retargetingCoverageRate).toBeLessThan(50);
+    expect(summer?.incrementalRecoveryRate).toBeGreaterThanOrEqual(12);
+  });
+
+  it("calculates incremental recovery separately from discount giveaway exposure", () => {
+    const review = getPromotionCartRetargetingReviews().find(
+      (item) => item.promotionId === "promo-free-ship",
+    );
+    if (!review) throw new Error("Missing free-shipping retargeting review");
+
+    expect(review.incrementalRecoveryRate).toBeCloseTo(
+      review.couponRecoveryRate - review.naturalRecoveryRate,
+      2,
+    );
+    expect(review.estimatedDiscountGiveawayRate).toBeCloseTo(
+      (review.retargetingCoverageRate * review.naturalRecoveryRate) / 100,
+      2,
+    );
   });
 });

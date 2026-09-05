@@ -20,6 +20,7 @@ import type {
   PromotionShippingOutlierReview,
   PromotionDeliveryExceptionReview,
   PromotionCadenceReview,
+  PromotionCartRetargetingReview,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
   PromotionStackingRisk,
@@ -751,6 +752,12 @@ export const promotions: Promotion[] = [
       averageGapDaysBetweenOffers: 21,
       repeatExposureRate: 22,
     },
+    cartRetargetingSignals: {
+      cartAbandonmentRate: 71,
+      retargetingCoverageRate: 35,
+      naturalRecoveryRate: 8,
+      couponRecoveryRate: 24,
+    },
     shippingReconciliationSignals: {
       carrierInvoiceLagDays: 7,
       retroactiveAdjustmentRate: 3,
@@ -830,6 +837,12 @@ export const promotions: Promotion[] = [
       daysDiscountedLast90: 34,
       averageGapDaysBetweenOffers: 6,
       repeatExposureRate: 55,
+    },
+    cartRetargetingSignals: {
+      cartAbandonmentRate: 72,
+      retargetingCoverageRate: 95,
+      naturalRecoveryRate: 28,
+      couponRecoveryRate: 31,
     },
     shippingReconciliationSignals: {
       carrierInvoiceLagDays: 28,
@@ -911,6 +924,12 @@ export const promotions: Promotion[] = [
       averageGapDaysBetweenOffers: 28,
       repeatExposureRate: 15,
     },
+    cartRetargetingSignals: {
+      cartAbandonmentRate: 64,
+      retargetingCoverageRate: 45,
+      naturalRecoveryRate: 10,
+      couponRecoveryRate: 28,
+    },
     shippingReconciliationSignals: {
       carrierInvoiceLagDays: 14,
       retroactiveAdjustmentRate: 7,
@@ -991,6 +1010,12 @@ export const promotions: Promotion[] = [
       averageGapDaysBetweenOffers: 9,
       repeatExposureRate: 47,
     },
+    cartRetargetingSignals: {
+      cartAbandonmentRate: 69,
+      retargetingCoverageRate: 60,
+      naturalRecoveryRate: 18,
+      couponRecoveryRate: 26,
+    },
     shippingReconciliationSignals: {
       carrierInvoiceLagDays: 21,
       retroactiveAdjustmentRate: 11,
@@ -1070,6 +1095,12 @@ export const promotions: Promotion[] = [
       daysDiscountedLast90: 85,
       averageGapDaysBetweenOffers: 2,
       repeatExposureRate: 71,
+    },
+    cartRetargetingSignals: {
+      cartAbandonmentRate: 76,
+      retargetingCoverageRate: 80,
+      naturalRecoveryRate: 32,
+      couponRecoveryRate: 38,
     },
     shippingReconciliationSignals: {
       carrierInvoiceLagDays: 28,
@@ -2254,6 +2285,81 @@ export function getPromotionShippingReconciliationReviews(): PromotionShippingRe
         shippingReconciliationReviewRank[b.reviewStatus];
       return rank === 0
         ? b.unreconciledShippingCostRate - a.unreconciledShippingCostRate
+        : rank;
+    });
+}
+
+
+const cartRetargetingReviewRank: Record<
+  PromotionCartRetargetingReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Cart-retargeting incrementality gate. Abandoned carts can recover without a
+ * coupon, so broad follow-up offers need a holdout before that recovery is
+ * credited as incremental revenue.
+ */
+export function getPromotionCartRetargetingReviews(): PromotionCartRetargetingReview[] {
+  return promotions
+    .map((promo) => {
+      const {
+        cartAbandonmentRate,
+        retargetingCoverageRate,
+        naturalRecoveryRate,
+        couponRecoveryRate,
+      } = promo.cartRetargetingSignals;
+      const incrementalRecoveryRate = Math.max(
+        couponRecoveryRate - naturalRecoveryRate,
+        0,
+      );
+      const estimatedDiscountGiveawayRate =
+        (retargetingCoverageRate * naturalRecoveryRate) / 100;
+      const broadRetargeting = retargetingCoverageRate >= 70;
+      const highNaturalRecovery = naturalRecoveryRate >= 25;
+      const weakIncrementality = incrementalRecoveryRate < 8;
+      const meaningfulAbandonment = cartAbandonmentRate >= 60;
+      const reviewStatus: PromotionCartRetargetingReview["reviewStatus"] =
+        meaningfulAbandonment &&
+        broadRetargeting &&
+        highNaturalRecovery &&
+        weakIncrementality
+          ? "blocked"
+          : retargetingCoverageRate >= 50 ||
+              naturalRecoveryRate >= 15 ||
+              incrementalRecoveryRate < 12
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Broad cart retargeting reaches carts with meaningful natural recovery; hold coupon value until a randomized holdout proves incremental lift."
+          : reviewStatus === "review_required"
+            ? "Cart recovery may include organic conversions; narrow the audience and validate coupon lift with a holdout before scaling."
+            : "Targeted retargeting shows modeled incremental recovery above the review threshold with limited natural-recovery exposure.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        cartAbandonmentRate,
+        retargetingCoverageRate,
+        naturalRecoveryRate,
+        couponRecoveryRate,
+        incrementalRecoveryRate,
+        estimatedDiscountGiveawayRate,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        cartRetargetingReviewRank[a.reviewStatus] -
+        cartRetargetingReviewRank[b.reviewStatus];
+      return rank === 0
+        ? b.estimatedDiscountGiveawayRate - a.estimatedDiscountGiveawayRate
         : rank;
     });
 }

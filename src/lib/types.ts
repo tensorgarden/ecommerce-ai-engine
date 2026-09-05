@@ -145,6 +145,13 @@ export interface PromotionCadenceSignals {
   repeatExposureRate: number; // % of influenced orders from buyers who redeemed any discount in the last 90 days
 }
 
+export interface PromotionCartRetargetingSignals {
+  cartAbandonmentRate: number; // % of carts abandoned before checkout
+  retargetingCoverageRate: number; // % of abandoned carts shown the offer
+  naturalRecoveryRate: number; // % expected to convert without the coupon
+  couponRecoveryRate: number; // % expected to convert after the coupon
+}
+
 export type PromotionRedemptionChannel =
   | "email"
   | "sms"
@@ -194,6 +201,7 @@ export interface Promotion {
   abuseSignals: PromotionAbuseSignals;
   crackResistanceSignals: PromotionCrackResistanceSignals;
   cadenceSignals: PromotionCadenceSignals;
+  cartRetargetingSignals: PromotionCartRetargetingSignals;
   audienceIntent: PromotionAudienceIntent;
   targetSegments: string[]; // customer segment IDs or "all"
   excludedSegments: string[]; // customer segment IDs withheld from the offer
@@ -335,6 +343,19 @@ export interface PromotionCadenceReview {
   daysDiscountedLast90: number;
   averageGapDaysBetweenOffers: number;
   repeatExposureRate: number;
+  reason: string;
+}
+
+export interface PromotionCartRetargetingReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  cartAbandonmentRate: number;
+  retargetingCoverageRate: number;
+  naturalRecoveryRate: number;
+  couponRecoveryRate: number;
+  incrementalRecoveryRate: number;
+  estimatedDiscountGiveawayRate: number;
   reason: string;
 }
 
