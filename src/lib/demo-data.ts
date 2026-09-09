@@ -21,6 +21,7 @@ import type {
   PromotionDeliveryExceptionReview,
   PromotionCadenceReview,
   PromotionCartRetargetingReview,
+  PromotionChannelAttributionReview,
   PromotionProfitabilitySnapshot,
   PromotionBreakEvenSnapshot,
   PromotionStackingRisk,
@@ -758,6 +759,13 @@ export const promotions: Promotion[] = [
       naturalRecoveryRate: 8,
       couponRecoveryRate: 24,
     },
+    channelAttributionSignals: {
+      reportedChannel: "email",
+      observedChannel: "email",
+      channelMismatchRate: 3,
+      lastClickCreditRate: 45,
+      unresolvedAttributionRate: 2,
+    },
     shippingReconciliationSignals: {
       carrierInvoiceLagDays: 7,
       retroactiveAdjustmentRate: 3,
@@ -843,6 +851,13 @@ export const promotions: Promotion[] = [
       retargetingCoverageRate: 95,
       naturalRecoveryRate: 28,
       couponRecoveryRate: 31,
+    },
+    channelAttributionSignals: {
+      reportedChannel: "coupon_extension",
+      observedChannel: "onsite_banner",
+      channelMismatchRate: 32,
+      lastClickCreditRate: 82,
+      unresolvedAttributionRate: 18,
     },
     shippingReconciliationSignals: {
       carrierInvoiceLagDays: 28,
@@ -930,6 +945,13 @@ export const promotions: Promotion[] = [
       naturalRecoveryRate: 10,
       couponRecoveryRate: 28,
     },
+    channelAttributionSignals: {
+      reportedChannel: "email",
+      observedChannel: "sms",
+      channelMismatchRate: 11,
+      lastClickCreditRate: 58,
+      unresolvedAttributionRate: 7,
+    },
     shippingReconciliationSignals: {
       carrierInvoiceLagDays: 14,
       retroactiveAdjustmentRate: 7,
@@ -1016,6 +1038,13 @@ export const promotions: Promotion[] = [
       naturalRecoveryRate: 18,
       couponRecoveryRate: 26,
     },
+    channelAttributionSignals: {
+      reportedChannel: "affiliate_network",
+      observedChannel: "email",
+      channelMismatchRate: 18,
+      lastClickCreditRate: 74,
+      unresolvedAttributionRate: 10,
+    },
     shippingReconciliationSignals: {
       carrierInvoiceLagDays: 21,
       retroactiveAdjustmentRate: 11,
@@ -1101,6 +1130,13 @@ export const promotions: Promotion[] = [
       retargetingCoverageRate: 80,
       naturalRecoveryRate: 32,
       couponRecoveryRate: 38,
+    },
+    channelAttributionSignals: {
+      reportedChannel: "loyalty_portal",
+      observedChannel: "coupon_extension",
+      channelMismatchRate: 26,
+      lastClickCreditRate: 78,
+      unresolvedAttributionRate: 15,
     },
     shippingReconciliationSignals: {
       carrierInvoiceLagDays: 28,
@@ -2360,6 +2396,71 @@ export function getPromotionCartRetargetingReviews(): PromotionCartRetargetingRe
         cartRetargetingReviewRank[b.reviewStatus];
       return rank === 0
         ? b.estimatedDiscountGiveawayRate - a.estimatedDiscountGiveawayRate
+        : rank;
+    });
+}
+
+
+const channelAttributionReviewRank: Record<
+  PromotionChannelAttributionReview["reviewStatus"],
+  number
+> = {
+  blocked: 0,
+  review_required: 1,
+  approved: 2,
+};
+
+/**
+ * Channel-attribution integrity gate. Last-click reporting can over-credit the
+ * channel that captured a coupon while assisted or observed paths point
+ * elsewhere, so material disagreement stays out of budget decisions.
+ */
+export function getPromotionChannelAttributionReviews(): PromotionChannelAttributionReview[] {
+  return promotions
+    .map((promo) => {
+      const {
+        reportedChannel,
+        observedChannel,
+        channelMismatchRate,
+        lastClickCreditRate,
+        unresolvedAttributionRate,
+      } = promo.channelAttributionSignals;
+      const channelMismatch = reportedChannel !== observedChannel;
+      const materialMismatch = channelMismatch && channelMismatchRate >= 25;
+      const concentratedLastClick = lastClickCreditRate >= 75;
+      const reviewStatus: PromotionChannelAttributionReview["reviewStatus"] =
+        materialMismatch && concentratedLastClick
+          ? "blocked"
+          : channelMismatchRate >= 10 ||
+              concentratedLastClick ||
+              unresolvedAttributionRate >= 8
+            ? "review_required"
+            : "approved";
+      const reason =
+        reviewStatus === "blocked"
+          ? "Material disagreement between reported and observed channels is concentrated in last-click credit; reconcile conversion paths before shifting budget."
+          : reviewStatus === "review_required"
+            ? "Channel evidence or last-click concentration needs path-level reconciliation before the promotion receives more budget."
+            : "Reported and observed channels align with low unresolved attribution, so routine channel reporting is reliable.";
+
+      return {
+        promotionId: promo.id,
+        name: promo.name,
+        reviewStatus,
+        reportedChannel,
+        observedChannel,
+        channelMismatchRate,
+        lastClickCreditRate,
+        unresolvedAttributionRate,
+        reason,
+      };
+    })
+    .sort((a, b) => {
+      const rank =
+        channelAttributionReviewRank[a.reviewStatus] -
+        channelAttributionReviewRank[b.reviewStatus];
+      return rank === 0
+        ? b.channelMismatchRate - a.channelMismatchRate
         : rank;
     });
 }

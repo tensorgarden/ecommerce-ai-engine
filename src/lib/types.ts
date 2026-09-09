@@ -152,6 +152,14 @@ export interface PromotionCartRetargetingSignals {
   couponRecoveryRate: number; // % expected to convert after the coupon
 }
 
+export interface PromotionChannelAttributionSignals {
+  reportedChannel: PromotionRedemptionChannel;
+  observedChannel: PromotionRedemptionChannel;
+  channelMismatchRate: number; // % of influenced orders with conflicting channel evidence
+  lastClickCreditRate: number; // % receiving channel credit from last-click attribution
+  unresolvedAttributionRate: number; // % of influenced orders without a reconciled source
+}
+
 export type PromotionRedemptionChannel =
   | "email"
   | "sms"
@@ -202,6 +210,7 @@ export interface Promotion {
   crackResistanceSignals: PromotionCrackResistanceSignals;
   cadenceSignals: PromotionCadenceSignals;
   cartRetargetingSignals: PromotionCartRetargetingSignals;
+  channelAttributionSignals: PromotionChannelAttributionSignals;
   audienceIntent: PromotionAudienceIntent;
   targetSegments: string[]; // customer segment IDs or "all"
   excludedSegments: string[]; // customer segment IDs withheld from the offer
@@ -356,6 +365,18 @@ export interface PromotionCartRetargetingReview {
   couponRecoveryRate: number;
   incrementalRecoveryRate: number;
   estimatedDiscountGiveawayRate: number;
+  reason: string;
+}
+
+export interface PromotionChannelAttributionReview {
+  promotionId: string;
+  name: string;
+  reviewStatus: "approved" | "review_required" | "blocked";
+  reportedChannel: PromotionRedemptionChannel;
+  observedChannel: PromotionRedemptionChannel;
+  channelMismatchRate: number;
+  lastClickCreditRate: number;
+  unresolvedAttributionRate: number;
   reason: string;
 }
 

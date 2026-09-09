@@ -26,6 +26,7 @@ import {
   getPromotionDeliveryExceptionReviews,
   getPromotionCadenceReviews,
   getPromotionCartRetargetingReviews,
+  getPromotionChannelAttributionReviews,
   getPromotionInventoryRefreshReadinessReviews,
   getPromotionFreeShippingThresholdReviews,
   getPromotionStackingRisks,
@@ -1190,5 +1191,68 @@ describe("PromotionCartRetargetingReviews", () => {
       (review.retargetingCoverageRate * review.naturalRecoveryRate) / 100,
       2,
     );
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// 29. Promotion channel-attribution integrity guardrails
+// ---------------------------------------------------------------------------
+describe("PromotionChannelAttributionReviews", () => {
+  it("returns one attribution review per promotion with bounded signals", () => {
+    const reviews = getPromotionChannelAttributionReviews();
+    expect(reviews).toHaveLength(promotions.length);
+
+    for (const promo of promotions) {
+      const signals = promo.channelAttributionSignals;
+      expect(signals.channelMismatchRate).toBeGreaterThanOrEqual(0);
+      expect(signals.channelMismatchRate).toBeLessThanOrEqual(100);
+      expect(signals.lastClickCreditRate).toBeGreaterThanOrEqual(0);
+      expect(signals.lastClickCreditRate).toBeLessThanOrEqual(100);
+      expect(signals.unresolvedAttributionRate).toBeGreaterThanOrEqual(0);
+      expect(signals.unresolvedAttributionRate).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it("blocks material channel mismatches when last-click credit could shift budget to the wrong source", () => {
+    const review = getPromotionChannelAttributionReviews().find(
+      (item) => item.promotionId === "promo-free-ship",
+    );
+
+    expect(review?.reviewStatus).toBe("blocked");
+    expect(review?.reportedChannel).not.toBe(review?.observedChannel);
+    expect(review?.channelMismatchRate).toBeGreaterThanOrEqual(25);
+    expect(review?.lastClickCreditRate).toBeGreaterThanOrEqual(75);
+    expect(review?.reason).toContain("last-click");
+  });
+
+  it("review-gates moderate disagreement while approving aligned channel evidence", () => {
+    const reviews = getPromotionChannelAttributionReviews();
+    const bundle = reviews.find(
+      (item) => item.promotionId === "promo-bundle-deal",
+    );
+    const summer = reviews.find(
+      (item) => item.promotionId === "promo-summer-sale",
+    );
+
+    expect(bundle?.reviewStatus).toBe("review_required");
+    expect(bundle?.reportedChannel).not.toBe(bundle?.observedChannel);
+    expect(summer?.reviewStatus).toBe("approved");
+    expect(summer?.reportedChannel).toBe(summer?.observedChannel);
+  });
+
+  it("sorts blocked attribution reviews ahead of review and approved records", () => {
+    const reviews = getPromotionChannelAttributionReviews();
+    const rank: Record<string, number> = {
+      blocked: 0,
+      review_required: 1,
+      approved: 2,
+    };
+
+    for (let i = 1; i < reviews.length; i++) {
+      expect(rank[reviews[i - 1].reviewStatus]).toBeLessThanOrEqual(
+        rank[reviews[i].reviewStatus],
+      );
+    }
   });
 });
