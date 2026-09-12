@@ -77,6 +77,17 @@ Aggregate business KPIs covering total revenue, growth rate, gross margin, net p
 ### Promotion
 Campaign tracking with discount types (percentage, fixed amount, BOGO, free shipping, bundle), budget utilization, revenue attribution, and ROI calculation.
 
+### Promotion economics review
+Top-line promotion revenue is not treated as incremental by default. Broad coupons can discount orders that would have happened anyway, while shipping, returns, loyalty liabilities, and attribution errors hide the resulting margin leakage. The demo therefore surfaces:
+
+- margin-adjusted ROI and break-even volume lift;
+- audience, coupon-leakage, stacking, return, abuse, and inventory gates;
+- demand pull-forward and post-promotion recovery risk;
+- fulfillment, shipping-zone, delivery-exception, and invoice-reconciliation exposure;
+- cart-retargeting incrementality and channel-attribution integrity.
+
+The thresholds are demo controls, not universal benchmarks. The approach reflects current ecommerce guidance that promotions should be evaluated on incremental contribution rather than promotional revenue alone. See [Ecommerce Discount Strategy 2026](https://www.digitalapplied.com/blog/ecommerce-discount-strategy-2026-margin-aware-playbook) for the cannibalization and margin-aware framing used in this example.
+
 ## License
 
 Proprietary. All rights reserved.
