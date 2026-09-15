@@ -1255,4 +1255,17 @@ describe("PromotionChannelAttributionReviews", () => {
       );
     }
   });
+
+  it("keeps approved attribution reviews below unresolved-source thresholds", () => {
+    const reviews = getPromotionChannelAttributionReviews();
+    const approved = reviews.filter((item) => item.reviewStatus === "approved");
+
+    expect(approved.length).toBeGreaterThan(0);
+    for (const review of approved) {
+      expect(review.reportedChannel).toBe(review.observedChannel);
+      expect(review.channelMismatchRate).toBeLessThan(10);
+      expect(review.lastClickCreditRate).toBeLessThan(75);
+      expect(review.unresolvedAttributionRate).toBeLessThan(8);
+    }
+  });
 });
